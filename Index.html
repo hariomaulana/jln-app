@@ -1,884 +1,1371 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JLN MANAGEMEN SYSTEM</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .sidebar-active { background-color: #3b82f6; color: white; }
-        .loading-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255,255,255,0.8); z-index: 9999;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .hidden { display: none !important; }
-        /* Scrollbar Halus */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        /* Table Header Sort Cursor */
-        th.sortable { cursor: pointer; user-select: none; }
-        th.sortable:hover { background-color: #f3f4f6; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JLN MANAGEMEN SYSTEM</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+    .sidebar-active { background-color: #3b82f6; color: white; }
+    .loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255,255,255,0.8); z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hidden { display: none !important; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background-color: #f3f4f6; }
+    #mapPicker { height: 420px; border-radius: 14px; }
+  </style>
 </head>
+
 <body>
 
-    <!-- LOADING OVERLAY -->
-    <div id="loadingOverlay" class="loading-overlay hidden">
-        <div class="flex flex-col items-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p class="mt-3 text-blue-600 font-medium" id="loadingText">Memproses...</p>
+  <!-- LOADING OVERLAY -->
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="flex flex-col items-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <p class="mt-3 text-blue-600 font-medium" id="loadingText">Memproses...</p>
+    </div>
+  </div>
+
+  <!-- UNIVERSAL MODAL FORM -->
+  <div id="modalForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
+      <div class="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
+        <h3 class="font-bold text-lg text-gray-800" id="modalTitle">Form Input</h3>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-red-500"><i data-lucide="x"></i></button>
+      </div>
+      <div class="p-6 overflow-y-auto custom-scrollbar">
+        <form id="dynamicForm" onsubmit="handleFormSubmit(event)" class="space-y-4"></form>
+      </div>
+      <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-200">Batal</button>
+        <button type="submit" form="dynamicForm" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Simpan Data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP PICKER MODAL (SATELLITE) -->
+  <div id="mapPickerModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 flex flex-col max-h-[92vh]">
+      <div class="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
+        <div>
+          <h3 class="font-bold text-lg text-gray-800">Pilih Koordinat (Mode Satelit)</h3>
+          <p class="text-xs text-gray-500">Klik peta untuk memindahkan pin, atau drag pin. Lalu klik Gunakan.</p>
         </div>
+        <button onclick="closeMapPicker()" class="text-gray-400 hover:text-red-500"><i data-lucide="x"></i></button>
+      </div>
+
+      <div class="p-5 space-y-3 overflow-y-auto custom-scrollbar">
+        <div class="flex flex-col md:flex-row gap-2">
+          <input id="mapSearchInput" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Cari lokasi (contoh: nama desa / masjid / jalan)">
+          <button type="button" onclick="searchOnMap()" class="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800">Cari</button>
+          <button type="button" onclick="useMyLocation()" class="px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium">Lokasi Saya</button>
+        </div>
+
+        <div id="mapPicker" class="border"></div>
+
+        <div class="text-sm">
+          <div class="font-medium text-gray-700">Terpilih:</div>
+          <div class="text-gray-600" id="mapPickedText">-</div>
+          <div class="mt-1">
+            <a id="mapOpenGmaps" href="#" target="_blank" class="text-blue-600 hover:underline text-xs hidden">Buka di Google Maps</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+        <button type="button" onclick="closeMapPicker()" class="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-200">Batal</button>
+        <button type="button" onclick="applyPickedCoords()" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Gunakan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP CONTAINER -->
+  <div id="app" class="min-h-screen flex flex-col">
+
+    <!-- LOGIN VIEW -->
+    <div id="loginView" class="flex-1 flex items-center justify-center p-4">
+      <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+        <div class="text-center mb-8">
+          <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="activity" class="text-blue-600 w-8 h-8"></i>
+          </div>
+          <h1 class="text-2xl font-bold text-gray-800">JLN MANAGEMEN</h1>
+          <p class="text-gray-500">Sistem Informasi Management</p>
+        </div>
+
+        <div id="previewBadge" class="bg-amber-50 border border-amber-200 p-3 rounded-lg mb-6 hidden">
+          <p class="text-xs text-amber-700 font-bold">MODE PREVIEW</p>
+          <p class="text-xs text-amber-600">Admin: <b>admin</b> | Pass: <b>Admin2024!</b></p>
+        </div>
+
+        <form onsubmit="handleLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Username / No. Internet</label>
+            <input type="text" id="loginUsername" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+            <input type="password" id="loginPassword" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+          </div>
+
+          <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-all duration-300">
+            Login System
+          </button>
+
+          <div class="text-center mt-4">
+            <p class="text-xs text-gray-400">Silakan login menggunakan akun yang diberikan Admin.</p>
+          </div>
+        </form>
+      </div>
     </div>
 
-    <!-- UNIVERSAL MODAL FORM -->
-    <div id="modalForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden backdrop-blur-sm">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
-            <div class="p-5 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
-                <h3 class="font-bold text-lg text-gray-800" id="modalTitle">Form Input</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-red-500"><i data-lucide="x"></i></button>
-            </div>
-            <div class="p-6 overflow-y-auto custom-scrollbar">
-                <form id="dynamicForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
-                    <!-- Fields injected here -->
-                </form>
-            </div>
-            <div class="p-5 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
-                <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-200">Batal</button>
-                <button type="submit" form="dynamicForm" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Simpan Data</button>
-            </div>
+    <!-- MAIN VIEW -->
+    <div id="mainView" class="hidden flex flex-1 overflow-hidden h-screen">
+      <!-- Sidebar -->
+      <aside id="sidebar" class="bg-white w-64 border-r flex-shrink-0 flex flex-col transition-all duration-300 transform -translate-x-full md:translate-x-0 absolute md:relative z-40 h-full shadow-lg md:shadow-none">
+        <div class="p-6 border-b flex items-center justify-between">
+          <span class="font-bold text-xl text-blue-600 flex items-center gap-2">
+            <i data-lucide="network"></i> JLN MGR
+          </span>
+          <button class="md:hidden" onclick="toggleSidebar()"><i data-lucide="x"></i></button>
         </div>
+
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar" id="navLinks"></nav>
+
+        <div class="p-4 border-t bg-gray-50">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold" id="userInitial">A</div>
+            <div class="overflow-hidden">
+              <p class="text-sm font-bold truncate" id="userNameDisplay">Loading...</p>
+              <p class="text-xs text-gray-500" id="userRoleDisplay">Role</p>
+            </div>
+          </div>
+          <button onclick="logout()" class="w-full text-left px-4 py-2 rounded-lg hover:bg-red-50 text-red-600 flex items-center gap-2">
+            <i data-lucide="log-out" class="w-4 h-4"></i> Keluar
+          </button>
+        </div>
+      </aside>
+
+      <!-- Content Area -->
+      <main class="flex-1 flex flex-col overflow-hidden">
+        <!-- Header -->
+        <header class="bg-white border-b p-4 flex items-center justify-between">
+          <button class="md:hidden" onclick="toggleSidebar()"><i data-lucide="menu"></i></button>
+          <h2 class="font-bold text-lg text-gray-800" id="pageTitle">Dashboard</h2>
+          <div class="flex items-center gap-2">
+            <span class="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700 font-bold">LIVE</span>
+          </div>
+        </header>
+
+        <!-- Dynamic Content -->
+        <section class="flex-1 overflow-y-auto p-6 custom-scrollbar" id="contentArea"></section>
+      </main>
     </div>
+  </div>
 
-    <!-- APP CONTAINER -->
-    <div id="app" class="min-h-screen flex flex-col">
-        <!-- LOGIN VIEW -->
-        <div id="loginView" class="flex-1 flex items-center justify-center p-4">
-            <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
-                <div class="text-center mb-8">
-                    <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <i data-lucide="activity" class="text-blue-600 w-8 h-8"></i>
-                    </div>
-                    <h1 class="text-2xl font-bold text-gray-800">JLN MANAGEMEN</h1>
-                    <p class="text-gray-500">Sistem Informasi Management</p>
-                </div>
+<script>
+/* ===========================
+   GUARD
+=========================== */
+window.addEventListener('error', function(e){
+  console.error('JS Error:', e.error || e.message);
+  try { Swal.fire('Error JS', String(e.message || e.error || 'Unknown'), 'error'); } catch(_) {}
+});
+window.addEventListener('unhandledrejection', function(e){
+  console.error('Promise Error:', e.reason);
+  try { Swal.fire('Error Promise', String(e.reason || 'Unknown'), 'error'); } catch(_) {}
+});
 
-                <div id="previewBadge" class="bg-amber-50 border border-amber-200 p-3 rounded-lg mb-6 hidden">
-                    <p class="text-xs text-amber-700 font-bold">⚠️ MODE PREVIEW</p>
-                    <p class="text-xs text-amber-600">Admin: <b>admin</b> | Pass: <b>Admin2024!</b></p>
-                </div>
+/* ===========================
+   STATE
+=========================== */
+var currentUser = null;
+var isPreview = false;
+var refData = { packages: [], sales: [], locations: [], teknisi: [], customers: [] };
 
-                <form onsubmit="handleLogin(event)" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Username / No. Internet</label>
-                        <input type="text" id="loginUsername" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                        <input type="password" id="loginPassword" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                    </div>
-                    
-                    <button type="submit" id="btnLogin" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition-all duration-300">
-                        Login System
-                    </button>
+var currentEditId = null;
+var globalTableData = [];
+var globalTableConfig = null;
 
-                    <div class="text-center mt-4">
-                         <p class="text-xs text-gray-400">Silakan login menggunakan akun yang diberikan Admin.</p>
-                    </div>
-                </form>
-            </div>
-        </div>
+// table state + extra filter
+var tableState = { search:'', filterStatus:'', sortKey:'', sortDir:'asc', extraKey:'', extraVal:'' };
 
-        <!-- MAIN VIEW -->
-        <div id="mainView" class="hidden flex flex-1 overflow-hidden h-screen">
-            <!-- Sidebar -->
-            <aside id="sidebar" class="bg-white w-64 border-r flex-shrink-0 flex flex-col transition-all duration-300 transform -translate-x-full md:translate-x-0 absolute md:relative z-40 h-full shadow-lg md:shadow-none">
-                <div class="p-6 border-b flex items-center justify-between">
-                    <span class="font-bold text-xl text-blue-600 flex items-center gap-2">
-                        <i data-lucide="network"></i> JLN MGR
-                    </span>
-                    <button class="md:hidden" onclick="toggleSidebar()"><i data-lucide="x"></i></button>
-                </div>
-                <nav class="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar" id="navLinks">
-                    <!-- Links injected by JS -->
-                </nav>
-                <div class="p-4 border-t bg-gray-50">
-                    <div class="flex items-center gap-3 mb-4">
-                        <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold" id="userInitial">A</div>
-                        <div class="overflow-hidden">
-                            <p class="text-sm font-bold truncate" id="userNameDisplay">Loading...</p>
-                            <p class="text-xs text-gray-500" id="userRoleDisplay">Role</p>
-                        </div>
-                    </div>
-                    <button onclick="handleLogout()" class="w-full flex items-center gap-2 justify-center py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
-                        <i data-lucide="log-out" class="w-4 h-4"></i> Keluar
-                    </button>
-                </div>
-            </aside>
+// MOCK DB (preview)
+var mockDB = {
+  users: [
+    {id:'1', username:'admin', password:'Admin2024!', nama:'Super Admin', email:'admin@example.com', role:'Admin', telp:'081234', alamat:'Server Room', created_at:'-'},
+    {id:'2', username:'sales1', password:'123', nama:'Sales A', email:'sales@gmail.com', role:'Sales', telp:'08222', alamat:'-', created_at:'-'},
+    {id:'3', username:'tek1', password:'123', nama:'Teknisi A', email:'tek@gmail.com', role:'Teknisi', telp:'08333', alamat:'-', created_at:'-'}
+  ],
+  packages: [
+    {id:'p1', nama_paket:'Paket 10Mbps', harga:'150000', bandwidth:'10 Mbps', status_aktif:'Aktif', ketersediaan:'Tersedia', created_at:'-'}
+  ],
+  locations: [
+    {id:'l1', nama_blok:'Blok A', keterangan:'Dekat Masjid', created_at:'-'}
+  ],
+  customers: [
+    {id:'c1', nama:'Budi Santoso', username:'10001', password:'123', alamat:'Jl. Mawar No 1', lat:'-6.200000', lng:'106.816666', paket_id:'p1', lokasi_id:'l1', sales_id:'2', status:'Aktif', telp:'08567', foto_ktp:'', foto_rumah:'', catatan:'-'}
+  ],
+  tickets: [],
+  announcements: [],
+  tutorials: [],
+  reports: []
+};
 
-            <!-- Main Content -->
-            <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-gray-50">
-                <header class="bg-white border-b h-16 flex items-center justify-between px-4 md:px-8 shadow-sm">
-                    <button class="md:hidden p-2 text-gray-600" onclick="toggleSidebar()">
-                        <i data-lucide="menu"></i>
-                    </button>
-                    <h2 class="text-lg font-semibold text-gray-800" id="viewTitle">Dashboard</h2>
-                    <span id="liveBadge" class="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-full">LIVE</span>
-                </header>
+/* ===========================
+   UTIL UI
+=========================== */
+function startLoading(text){
+  document.getElementById('loadingText').textContent = text || 'Memproses...';
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+}
+function endLoading(){
+  document.getElementById('loadingOverlay').classList.add('hidden');
+}
 
-                <div id="content" class="flex-1 overflow-y-auto p-4 md:p-8">
-                    <!-- Dynamic Content -->
-                </div>
-            </main>
-        </div>
-    </div>
+function escapeHtml(s){
+  return String(s === undefined || s === null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
 
-    <!-- Footer -->
-    <footer class="text-center py-4 bg-white border-t">
-        <small class="text-muted">
-            Generated by <a href="https://lynk.id/farhanalfaizi/2y15g1m4lv37" target="_blank" class="text-decoration-none text-secondary">GAS WebApp Builder</a>
-        </small>
-    </footer>
+function getById(arr, id){
+  id = String(id || '');
+  return (arr || []).find(function(x){ return String(x.id) === id; }) || null;
+}
 
-    <script>
-        // --- GLOBAL STATE & MOCK DATA ---
-        let currentUser = null;
-        let currentView = 'Dashboard';
-        let currentEditId = null; 
-        let refData = { packages: [], sales: [], locations: [], teknisi: [], customers: [] };
+function fmtMoney(val){
+  var n = parseInt(val || 0, 10);
+  if (isNaN(n)) n = 0;
+  return 'Rp ' + n.toLocaleString('id-ID');
+}
 
-        // Table State Management
-        let globalTableData = [];
-        let globalTableConfig = { columns: [], tableName: '' };
-        let tableState = {
-            search: '',
-            sortKey: null,
-            sortDir: 'asc',
-            filterStatus: ''
-        };
+function badge(val){
+  var v = String(val || '-');
+  var color = 'gray';
+  if (['Aktif','Selesai','Tersedia','Aktif'].indexOf(v) !== -1) color = 'green';
+  if (['Open','Isolir','Tidak Tersedia','Non-Aktif'].indexOf(v) !== -1) color = 'red';
+  if (['Proses','Antrian'].indexOf(v) !== -1) color = 'blue';
+  return '<span class="px-2 py-1 rounded-full text-xs font-bold bg-' + color + '-100 text-' + color + '-700">' + escapeHtml(v) + '</span>';
+}
 
-        let mockDB = {
-            users: [{id: '1', username: 'admin', password: 'Admin2024!', nama: 'Super Admin', email:'admin@example.com', role: 'Admin', telp: '08123', alamat: 'Kantor'}],
-            customers: [{id: 'c1', nama: 'Budi Santoso', username: '10001', password: '123', alamat: 'Jl. Mawar No 1', paket_id: 'p1', lokasi_id: 'l1', sales_id: '1', status: 'Aktif', telp: '08567', foto_ktp: '', foto_rumah: ''}],
-            packages: [
-                {id: 'p1', nama_paket: 'Home 10Mbps', harga: 150000, bandwidth: '10 Mbps', status_aktif: 'Aktif', ketersediaan: 'Tersedia'},
-                {id: 'p2', nama_paket: 'Gamer 50Mbps', harga: 350000, bandwidth: '50 Mbps', status_aktif: 'Aktif', ketersediaan: 'Tidak Tersedia'}
-            ],
-            locations: [{id: 'l1', nama_blok: 'Blok A', keterangan: 'Aman'}],
-            tickets: [{id: 't1', judul_laporan: 'Internet Lemot', status: 'Open', created_at: '2024-02-01'}],
-            announcements: [{id: 'a1', judul: 'Maintenance Rutin', isi: 'Tanggal 1 ada perbaikan', target: 'Semua'}],
-            tutorials: [{id: 'tu1', judul: 'Cara Restart Modem', kategori: 'Pelanggan'}],
-            reports: []
-        };
+/* ===========================
+   INIT
+=========================== */
+window.addEventListener('load', function(){
+  lucide.createIcons();
+  isPreview = !(window.google && google.script && google.script.run);
+  if (isPreview) document.getElementById('previewBadge').classList.remove('hidden');
+});
 
-        // --- INIT ---
-        window.onload = function() {
-            lucide.createIcons();
-            checkEnvironment();
-            checkLoginState();
-        };
+/* ===========================
+   AUTH
+=========================== */
+function handleLogin(e){
+  e.preventDefault();
+  var username = document.getElementById('loginUsername').value.trim();
+  var password = document.getElementById('loginPassword').value.trim();
 
-        function checkEnvironment() {
-            if (typeof google === 'undefined') {
-                document.getElementById('previewBadge').classList.remove('hidden');
-                document.getElementById('liveBadge').textContent = 'PREVIEW';
-                document.getElementById('liveBadge').className = 'px-3 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full';
-            }
+  startLoading('Login...');
+
+  if (isPreview){
+    var u = (mockDB.users.find(function(x){return x.username===username && x.password===password;}))
+          || (mockDB.customers.find(function(x){return x.username===username && x.password===password;}));
+    if (u){
+      currentUser = Object.assign({}, u);
+      if (!currentUser.role) currentUser.role = 'Pelanggan';
+      afterLogin();
+    } else {
+      endLoading();
+      Swal.fire('Gagal', 'Username atau Password salah!', 'error');
+    }
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      endLoading();
+      if (res && res.success){
+        currentUser = res.user;
+        afterLogin();
+      } else {
+        Swal.fire('Gagal', (res && res.message) ? res.message : 'Login gagal', 'error');
+      }
+    })
+    .withFailureHandler(function(err){
+      endLoading();
+      Swal.fire('Error', String(err), 'error');
+    })
+    .loginUser({username: username, password: password});
+}
+
+function afterLogin(){
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('mainView').classList.remove('hidden');
+
+  document.getElementById('userNameDisplay').textContent = currentUser.nama || currentUser.username;
+  document.getElementById('userRoleDisplay').textContent = currentUser.role || 'Role';
+  document.getElementById('userInitial').textContent = (currentUser.nama || 'A').substring(0,1).toUpperCase();
+
+  buildNav();
+  renderDashboard();
+  loadReferenceData(function(){ refreshDashboardStats(); });
+}
+
+function logout(){
+  currentUser = null;
+  document.getElementById('mainView').classList.add('hidden');
+  document.getElementById('loginView').classList.remove('hidden');
+}
+
+/* ===========================
+   NAV & VIEW
+=========================== */
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('-translate-x-full');
+}
+
+function buildNav(){
+  var nav = document.getElementById('navLinks');
+  nav.innerHTML = '';
+
+  var menusAdmin = [
+    { id: 'Dashboard', icon:'layout-dashboard', table:null },
+    { id: 'Pelanggan', icon:'users', table:'customers' },
+    { id: 'Paket', icon:'package', table:'packages' },
+    { id: 'Lokasi', icon:'map-pin', table:'locations' },
+    { id: 'Users', icon:'user-cog', table:'users' },
+    { id: 'Tiket', icon:'tickets', table:'tickets' },
+    { id: 'Pengumuman', icon:'megaphone', table:'announcements' },
+    { id: 'Tutorial', icon:'video', table:'tutorials' },
+    { id: 'Laporan', icon:'file-text', table:'reports' }
+  ];
+
+  var menusSales = [
+    { id: 'Dashboard', icon:'layout-dashboard', table:null },
+    { id: 'Pelanggan', icon:'users', table:'customers' }
+  ];
+
+  var menusTek = [
+    { id: 'Dashboard', icon:'layout-dashboard', table:null },
+    { id: 'Tiket', icon:'tickets', table:'tickets' }
+  ];
+
+  var menusCust = [
+    { id: 'Dashboard', icon:'layout-dashboard', table:null },
+    { id: 'Tiket', icon:'tickets', table:'tickets' },
+    { id: 'Pengumuman', icon:'megaphone', table:'announcements' },
+    { id: 'Tutorial', icon:'video', table:'tutorials' }
+  ];
+
+  var menus = menusAdmin;
+  if (currentUser.role === 'Sales') menus = menusSales;
+  if (currentUser.role === 'Teknisi') menus = menusTek;
+  if (currentUser.role === 'Pelanggan') menus = menusCust;
+
+  menus.forEach(function(m){
+    var btn = document.createElement('button');
+    btn.className = 'w-full flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-blue-50 text-gray-700 transition';
+    btn.innerHTML = '<i data-lucide="'+m.icon+'" class="w-4 h-4"></i><span class="font-medium">'+m.id+'</span>';
+    btn.onclick = function(){
+      Array.prototype.forEach.call(document.querySelectorAll('#navLinks button'), function(b){
+        b.classList.remove('sidebar-active');
+      });
+      btn.classList.add('sidebar-active');
+      document.getElementById('pageTitle').textContent = m.id;
+
+      if (m.id === 'Dashboard') renderDashboard();
+      else renderTable(m.table, m.id);
+
+      if (window.innerWidth < 768) toggleSidebar();
+    };
+    nav.appendChild(btn);
+  });
+
+  var first = nav.querySelector('button');
+  if (first) first.classList.add('sidebar-active');
+  lucide.createIcons();
+}
+
+/* ===========================
+   DATA LOADER
+=========================== */
+function loadReferenceData(cb){
+  if (isPreview){
+    refData.packages = mockDB.packages;
+    refData.sales = mockDB.users.filter(function(u){return u.role === 'Sales';});
+    refData.teknisi = mockDB.users.filter(function(u){return u.role === 'Teknisi';});
+    refData.locations = mockDB.locations;
+    refData.customers = mockDB.customers;
+    if (cb) cb();
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      refData = res || refData;
+      if (cb) cb();
+    })
+    .withFailureHandler(function(err){
+      Swal.fire('Error', 'Gagal load reference data: ' + err, 'error');
+      if (cb) cb();
+    })
+    .getReferenceData();
+}
+
+/* ===========================
+   DASHBOARD
+=========================== */
+function renderDashboard(){
+  document.getElementById('contentArea').innerHTML =
+    '<div class="grid grid-cols-1 md:grid-cols-5 gap-4">' +
+      '<div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-sm text-gray-500">Pelanggan</p><p class="text-2xl font-bold" id="statCustomers">0</p></div>' +
+      '<div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-sm text-gray-500">Paket</p><p class="text-2xl font-bold" id="statPackages">0</p></div>' +
+      '<div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-sm text-gray-500">Tiket Aktif</p><p class="text-2xl font-bold" id="statTickets">0</p></div>' +
+      '<div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-sm text-gray-500">Sales</p><p class="text-2xl font-bold" id="statSales">0</p></div>' +
+      '<div class="bg-white p-5 rounded-2xl shadow-sm border"><p class="text-sm text-gray-500">Total Income</p><p class="text-2xl font-bold" id="statIncome">Rp 0</p></div>' +
+    '</div>' +
+    '<div class="mt-6 bg-white p-6 rounded-2xl shadow-sm border">' +
+      '<h3 class="font-bold text-gray-800 mb-2">Info</h3>' +
+      '<p class="text-sm text-gray-600">Sistem berjalan LIVE melalui Google Spreadsheet. Koordinat pelanggan bisa dipilih lewat peta satelit saat input pelanggan.</p>' +
+    '</div>';
+}
+
+function refreshDashboardStats(){
+  if (isPreview){
+    document.getElementById('statCustomers').textContent = mockDB.customers.length;
+    document.getElementById('statPackages').textContent = mockDB.packages.length;
+    document.getElementById('statTickets').textContent = mockDB.tickets.length;
+    document.getElementById('statSales').textContent = mockDB.users.filter(function(u){return u.role==='Sales';}).length;
+    document.getElementById('statIncome').textContent = 'Rp 0';
+    return;
+  }
+
+  google.script.run.withSuccessHandler(function(res){
+    if (!res || !res.success) return;
+    document.getElementById('statCustomers').textContent = res.customers;
+    document.getElementById('statPackages').textContent = res.packages;
+    document.getElementById('statTickets').textContent = res.tickets;
+    document.getElementById('statSales').textContent = res.sales;
+    document.getElementById('statIncome').textContent = 'Rp ' + (res.income || 0).toLocaleString('id-ID');
+  }).getDashboardStats();
+}
+
+/* ===========================
+   TABLE CONFIG PER MENU (filter + sort)
+=========================== */
+function getExtraFilterConfig(tableName){
+  // Kembalikan {label, options:[{val,txt}], key:'fieldname'} atau null
+  if (tableName === 'customers'){
+    // filter by Paket
+    var opts = [{val:'', txt:'Semua Paket'}].concat((refData.packages||[]).map(function(p){
+      return {val:p.id, txt:p.nama_paket};
+    }));
+    return { key:'paket_id', label:'Filter Paket', options: opts };
+  }
+
+  if (tableName === 'tickets'){
+    // filter by Teknisi
+    var opts2 = [{val:'', txt:'Semua Teknisi'}].concat((refData.teknisi||[]).map(function(t){
+      return {val:t.id, txt:t.nama};
+    }));
+    return { key:'teknisi_id', label:'Filter Teknisi', options: opts2 };
+  }
+
+  if (tableName === 'users'){
+    // filter by Role
+    return { key:'role', label:'Filter Role', options:[
+      {val:'', txt:'Semua Role'},
+      {val:'Admin', txt:'Admin'},
+      {val:'Sales', txt:'Sales'},
+      {val:'Teknisi', txt:'Teknisi'}
+    ]};
+  }
+
+  if (tableName === 'announcements'){
+    // filter by target
+    return { key:'target', label:'Filter Target', options:[
+      {val:'', txt:'Semua Target'},
+      {val:'Semua', txt:'Semua'},
+      {val:'Pelanggan', txt:'Pelanggan'},
+      {val:'Sales', txt:'Sales'},
+      {val:'Teknisi', txt:'Teknisi'}
+    ]};
+  }
+
+  if (tableName === 'tutorials'){
+    // filter by kategori
+    return { key:'kategori', label:'Filter Kategori', options:[
+      {val:'', txt:'Semua Kategori'},
+      {val:'Pelanggan', txt:'Pelanggan'},
+      {val:'Sales', txt:'Sales'},
+      {val:'Teknisi', txt:'Teknisi'}
+    ]};
+  }
+
+  if (tableName === 'reports'){
+    // filter by jenis laporan
+    return { key:'jenis_laporan', label:'Filter Jenis', options:[
+      {val:'', txt:'Semua Jenis'},
+      {val:'Pemasukan', txt:'Pemasukan'},
+      {val:'Pengeluaran', txt:'Pengeluaran'}
+    ]};
+  }
+
+  if (tableName === 'packages'){
+    // filter by status_aktif
+    return { key:'status_aktif', label:'Filter Status', options:[
+      {val:'', txt:'Semua Status'},
+      {val:'Aktif', txt:'Aktif'},
+      {val:'Non-Aktif', txt:'Non-Aktif'}
+    ]};
+  }
+
+  if (tableName === 'locations'){
+    return null;
+  }
+
+  return null;
+}
+
+/* ===========================
+   CRUD TABLE RENDER
+=========================== */
+function renderTable(tableName, title){
+  if (tableName === 'customers') {
+    renderCRUDTable('customers', 'Manajemen Pelanggan', [
+      { key:'nama', label:'Nama' },
+      { key:'telp', label:'WhatsApp' },
+      { key:'alamat', label:'Alamat' },
+      { key:'status', label:'Status', type:'badge' }
+    ]);
+  } else if (tableName === 'packages') {
+    renderCRUDTable('packages', 'Manajemen Paket', [
+      { key:'nama_paket', label:'Nama Paket' },
+      { key:'harga', label:'Harga', type:'money' },
+      { key:'bandwidth', label:'Bandwidth' },
+      { key:'ketersediaan', label:'Ketersediaan', type:'badge' },
+      { key:'status_aktif', label:'Status', type:'badge' }
+    ]);
+  } else if (tableName === 'locations') {
+    renderCRUDTable('locations', 'Manajemen Lokasi / Blok', [
+      { key:'nama_blok', label:'Nama Blok' },
+      { key:'keterangan', label:'Keterangan' }
+    ]);
+  } else if (tableName === 'users') {
+    renderCRUDTable('users', 'Manajemen User', [
+      { key:'nama', label:'Nama' },
+      { key:'username', label:'Username' },
+      { key:'email', label:'Email' },
+      { key:'role', label:'Role', type:'badge' }
+    ]);
+  } else if (tableName === 'tickets') {
+    renderCRUDTable('tickets', 'Manajemen Tiket', [
+      { key:'judul_laporan', label:'Judul' },
+      { key:'status', label:'Status', type:'badge' },
+      { key:'created_at', label:'Waktu' }
+    ]);
+  } else if (tableName === 'announcements') {
+    renderCRUDTable('announcements', 'Pengumuman', [
+      { key:'judul', label:'Judul' },
+      { key:'target', label:'Target', type:'badge' },
+      { key:'created_at', label:'Waktu' }
+    ]);
+  } else if (tableName === 'tutorials') {
+    renderCRUDTable('tutorials', 'Tutorial', [
+      { key:'judul', label:'Judul' },
+      { key:'kategori', label:'Kategori', type:'badge' }
+    ]);
+  } else if (tableName === 'reports') {
+    renderCRUDTable('reports', 'Laporan Keuangan', [
+      { key:'jenis_laporan', label:'Jenis', type:'badge' },
+      { key:'jumlah', label:'Nominal', type:'money' },
+      { key:'keterangan', label:'Keterangan' },
+      { key:'created_at', label:'Waktu' }
+    ]);
+  }
+}
+
+function renderCRUDTable(tableName, headerTitle, columns){
+  globalTableConfig = { tableName: tableName, headerTitle: headerTitle, columns: columns };
+  tableState = { search:'', filterStatus:'', sortKey:'', sortDir:'asc', extraKey:'', extraVal:'' };
+
+  var extra = getExtraFilterConfig(tableName);
+
+  // status filter ditampilkan hanya kalau ada field status/status_aktif/ketersediaan di tabel
+  // tapi kita tetap tampilkan dropdown status umum seperti sebelumnya agar tidak merusak alur.
+  var extraFilterHtml = '';
+  if (extra){
+    extraFilterHtml =
+      '<select id="tableFilterExtra" class="border rounded-lg px-3 py-2 outline-none bg-white" title="' + escapeHtml(extra.label) + '">' +
+        (extra.options||[]).map(function(o){
+          return '<option value="' + escapeHtml(o.val) + '">' + escapeHtml(o.txt) + '</option>';
+        }).join('') +
+      '</select>';
+  }
+
+  document.getElementById('contentArea').innerHTML =
+    '<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">' +
+      '<div>' +
+        '<h3 class="text-xl font-bold text-gray-800">' + escapeHtml(headerTitle) + '</h3>' +
+        '<p class="text-sm text-gray-500">Kelola data ' + escapeHtml(tableName) + ' secara realtime.</p>' +
+      '</div>' +
+      '<div class="flex gap-2">' +
+        '<button onclick="openForm(\'' + tableName + '\')" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium flex items-center gap-2">' +
+          '<i data-lucide="plus" class="w-4 h-4"></i> Tambah' +
+        '</button>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="bg-white rounded-2xl shadow-sm border overflow-hidden">' +
+      '<div class="p-4 border-b bg-gray-50 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">' +
+        '<div class="flex-1">' +
+          '<input id="tableSearch" placeholder="Cari..." class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500">' +
+        '</div>' +
+        '<div class="flex gap-2 flex-wrap justify-end">' +
+          (extraFilterHtml || '') +
+          '<select id="tableFilterStatus" class="border rounded-lg px-3 py-2 outline-none bg-white" title="Filter Status">' +
+            '<option value="">Semua Status</option>' +
+            '<option value="Aktif">Aktif</option>' +
+            '<option value="Antrian">Antrian</option>' +
+            '<option value="Non-Aktif">Non-Aktif</option>' +
+            '<option value="Open">Open</option>' +
+            '<option value="Proses">Proses</option>' +
+            '<option value="Selesai">Selesai</option>' +
+            '<option value="Tersedia">Tersedia</option>' +
+            '<option value="Tidak Tersedia">Tidak Tersedia</option>' +
+          '</select>' +
+          '<button onclick="loadTableData(\'' + tableName + '\')" class="px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-800">Refresh</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="overflow-x-auto">' +
+        '<table class="min-w-full divide-y divide-gray-200">' +
+          '<thead class="bg-gray-50">' +
+            '<tr>' +
+              columns.map(function(c){
+                return '<th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider sortable" onclick="sortBy(\'' + c.key + '\')">' + escapeHtml(c.label) + '</th>';
+              }).join('') +
+              '<th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Aksi</th>' +
+            '</tr>' +
+          '</thead>' +
+          '<tbody id="tableBody" class="bg-white divide-y divide-gray-100">' +
+            '<tr><td colspan="' + (columns.length + 1) + '" class="p-8 text-center text-gray-400">Loading...</td></tr>' +
+          '</tbody>' +
+        '</table>' +
+      '</div>' +
+
+      '<div class="p-4 border-t bg-gray-50 flex items-center justify-between text-sm text-gray-600" id="tableFooter">' +
+        '<span>Menampilkan 0 data</span>' +
+      '</div>' +
+    '</div>';
+
+  lucide.createIcons();
+
+  document.getElementById('tableSearch').addEventListener('input', function(e){
+    tableState.search = (e.target.value || '').trim().toLowerCase();
+    renderTableRows();
+  });
+  document.getElementById('tableFilterStatus').addEventListener('change', function(e){
+    tableState.filterStatus = e.target.value;
+    renderTableRows();
+  });
+
+  if (extra){
+    tableState.extraKey = extra.key;
+    var el = document.getElementById('tableFilterExtra');
+    if (el){
+      el.addEventListener('change', function(e){
+        tableState.extraVal = e.target.value;
+        renderTableRows();
+      });
+    }
+  }
+
+  loadTableData(tableName);
+}
+
+function sortBy(key){
+  if (tableState.sortKey === key) tableState.sortDir = (tableState.sortDir === 'asc') ? 'desc' : 'asc';
+  else { tableState.sortKey = key; tableState.sortDir = 'asc'; }
+  renderTableRows();
+}
+
+function loadTableData(tableName){
+  startLoading('Memuat data...');
+  if (isPreview){
+    globalTableData = mockDB[tableName] || [];
+    endLoading();
+    renderTableRows();
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(res){
+      globalTableData = res || [];
+      endLoading();
+      renderTableRows();
+    })
+    .withFailureHandler(function(err){
+      endLoading();
+      Swal.fire('Error', 'Gagal load data: ' + err, 'error');
+    })
+    .getSheetData(tableName);
+}
+
+function renderTableRows(){
+  var tbody = document.getElementById('tableBody');
+  var footer = document.getElementById('tableFooter');
+  if (!tbody) return;
+
+  var filtered = (globalTableData || []).filter(function(item){
+    // filter status (support status, status_aktif, ketersediaan, target, kategori)
+    if (tableState.filterStatus){
+      var hit = false;
+      ['status','status_aktif','ketersediaan'].forEach(function(k){
+        if (String(item[k] || '') === String(tableState.filterStatus)) hit = true;
+      });
+      if (!hit) return false;
+    }
+
+    // extra filter (paket_id, teknisi_id, role, target, kategori, jenis_laporan)
+    if (tableState.extraKey && tableState.extraVal){
+      if (String(item[tableState.extraKey] || '') !== String(tableState.extraVal)) return false;
+    }
+
+    // search
+    if (tableState.search){
+      var found = false;
+      Object.keys(item).forEach(function(k){
+        if (found) return;
+        var v = String(item[k] === undefined || item[k] === null ? '' : item[k]).toLowerCase();
+        if (v.indexOf(tableState.search) !== -1) found = true;
+      });
+      return found;
+    }
+    return true;
+  });
+
+  // sort
+  if (tableState.sortKey){
+    filtered.sort(function(a,b){
+      var valA = a[tableState.sortKey] || '';
+      var valB = b[tableState.sortKey] || '';
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (valA < valB) return (tableState.sortDir === 'asc') ? -1 : 1;
+      if (valA > valB) return (tableState.sortDir === 'asc') ? 1 : -1;
+      return 0;
+    });
+  }
+
+  if (filtered.length === 0){
+    tbody.innerHTML = '<tr><td colspan="' + (globalTableConfig.columns.length + 1) + '" class="p-8 text-center text-gray-400">Data tidak ditemukan.</td></tr>';
+    footer.innerHTML = '<span>Menampilkan <b>0</b> data</span>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(function(item){
+    var tds = globalTableConfig.columns.map(function(col){
+      var val = (item[col.key] === undefined || item[col.key] === null || item[col.key] === '') ? '-' : item[col.key];
+
+      if (col.type === 'money') val = fmtMoney(val);
+      if (col.type === 'badge') val = badge(val);
+
+      return '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">' + val + '</td>';
+    }).join('');
+
+    var itemStr = JSON.stringify(item).replace(/"/g, '&quot;');
+
+    // tombol detail + edit + delete
+    var actions =
+      '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end gap-3">' +
+        '<button onclick="showDetail(\'' + globalTableConfig.tableName + '\', ' + itemStr + ')" class="text-gray-600 hover:text-gray-900" title="Detail"><i data-lucide="eye" class="w-4 h-4"></i></button>' +
+        '<button onclick="openForm(\'' + globalTableConfig.tableName + '\', ' + itemStr + ')" class="text-blue-600 hover:text-blue-900" title="Edit"><i data-lucide="edit-2" class="w-4 h-4"></i></button>' +
+        '<button onclick="confirmDelete(\'' + globalTableConfig.tableName + '\', \'' + escapeHtml(item.id) + '\')" class="text-red-600 hover:text-red-900" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
+      '</td>';
+
+    return '<tr class="hover:bg-gray-50 transition-colors border-b last:border-0">' + tds + actions + '</tr>';
+  }).join('');
+
+  footer.innerHTML = '<span>Menampilkan <b>' + filtered.length + '</b> dari <b>' + globalTableData.length + '</b> data</span>';
+  lucide.createIcons();
+}
+
+/* ===========================
+   DETAIL POPUP (icon eye)
+=========================== */
+function showDetail(tableName, item){
+  try {
+    var html = '';
+
+    if (tableName === 'customers'){
+      var paket = getById(refData.packages, item.paket_id);
+      var lokasi = getById(refData.locations, item.lokasi_id);
+      var sales = getById(refData.sales, item.sales_id) || getById(mockDB.users, item.sales_id);
+
+      var lat = item.lat || '';
+      var lng = item.lng || '';
+      var mapsLink = (lat && lng) ? ('https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng)) : '';
+
+      html =
+        '<div class="text-left">' +
+          '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' +
+            '<div><div class="text-xs text-gray-500">Nama</div><div class="font-semibold">' + escapeHtml(item.nama) + '</div></div>' +
+            '<div><div class="text-xs text-gray-500">WhatsApp</div><div class="font-semibold">' + escapeHtml(item.telp) + '</div></div>' +
+            '<div class="md:col-span-2"><div class="text-xs text-gray-500">Alamat</div><div class="font-semibold">' + escapeHtml(item.alamat) + '</div></div>' +
+
+            '<div><div class="text-xs text-gray-500">Status</div><div>' + badge(item.status) + '</div></div>' +
+            '<div><div class="text-xs text-gray-500">Paket</div><div class="font-semibold">' + escapeHtml(paket ? paket.nama_paket : (item.paket_id||'-')) + '</div></div>' +
+            '<div><div class="text-xs text-gray-500">Lokasi/Blok</div><div class="font-semibold">' + escapeHtml(lokasi ? lokasi.nama_blok : (item.lokasi_id||'-')) + '</div></div>' +
+            '<div><div class="text-xs text-gray-500">Sales</div><div class="font-semibold">' + escapeHtml(sales ? sales.nama : (item.sales_id||'-')) + '</div></div>' +
+
+            '<div><div class="text-xs text-gray-500">Koordinat</div><div class="font-semibold">' + escapeHtml((lat && lng) ? (lat + ', ' + lng) : '-') + '</div>' +
+              (mapsLink ? '<a class="text-blue-600 text-xs hover:underline" target="_blank" href="' + mapsLink + '">Buka di Google Maps</a>' : '') +
+            '</div>' +
+            '<div><div class="text-xs text-gray-500">No Internet</div><div class="font-semibold">' + escapeHtml(item.username || '-') + '</div></div>' +
+            '<div><div class="text-xs text-gray-500">Created</div><div class="font-semibold">' + escapeHtml(item.created_at || '-') + '</div></div>' +
+            '<div class="md:col-span-2"><div class="text-xs text-gray-500">Catatan Tambahan</div><div class="font-semibold">' + escapeHtml(item.catatan || '-') + '</div></div>' +
+          '</div>' +
+
+          '<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">' +
+            '<div class="p-3 border rounded-xl">' +
+              '<div class="text-xs text-gray-500 mb-1">Foto KTP</div>' +
+              (item.foto_ktp ? '<a target="_blank" class="text-blue-600 hover:underline text-sm" href="' + escapeHtml(item.foto_ktp) + '">Lihat Foto</a>' : '<div class="text-sm text-gray-400">-</div>') +
+            '</div>' +
+            '<div class="p-3 border rounded-xl">' +
+              '<div class="text-xs text-gray-500 mb-1">Foto Rumah</div>' +
+              (item.foto_rumah ? '<a target="_blank" class="text-blue-600 hover:underline text-sm" href="' + escapeHtml(item.foto_rumah) + '">Lihat Foto</a>' : '<div class="text-sm text-gray-400">-</div>') +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+    else {
+      // default detail untuk tabel lain
+      var rows = Object.keys(item || {}).map(function(k){
+        var v = item[k];
+        if (k === 'password') v = '••••••';
+        return '<tr><td class="pr-3 py-1 text-xs text-gray-500">' + escapeHtml(k) + '</td><td class="py-1 text-sm text-gray-800 font-medium">' + escapeHtml(v) + '</td></tr>';
+      }).join('');
+
+      html =
+        '<div class="text-left">' +
+          '<div class="border rounded-xl p-3 overflow-auto max-h-[60vh]">' +
+            '<table class="w-full">' + rows + '</table>' +
+          '</div>' +
+        '</div>';
+    }
+
+    Swal.fire({
+      title: 'Detail',
+      html: html,
+      width: 860,
+      showCloseButton: true,
+      confirmButtonText: 'Tutup'
+    });
+    lucide.createIcons();
+  } catch (e) {
+    Swal.fire('Error', 'Gagal tampilkan detail: ' + e, 'error');
+  }
+}
+
+/* ===========================
+   DYNAMIC FORM
+=========================== */
+function openForm(tableName, item){
+  currentEditId = item ? item.id : null;
+  document.getElementById('modalTitle').textContent = item ? ('Edit ' + tableName) : ('Tambah ' + tableName);
+
+  var form = document.getElementById('dynamicForm');
+  form.innerHTML = '';
+  form.dataset.table = tableName;
+
+  var fields = [];
+
+  if (tableName === 'customers'){
+    fields = [
+      { name:'nama', label:'Nama Lengkap', type:'text', req:true },
+      { name:'telp', label:'WhatsApp', type:'text', req:true },
+      { name:'alamat', label:'Alamat', type:'textarea', req:true },
+      { type:'coords', label:'Koordinat (Lat, Lng)', latName:'lat', lngName:'lng' },
+
+      { name:'lokasi_id', label:'Lokasi (Blok)', type:'select',
+        options:(refData.locations||[]).map(function(l){return {val:l.id, txt:l.nama_blok};}) },
+
+      { name:'paket_id', label:'Paket', type:'select',
+        options:(refData.packages||[]).map(function(p){return {val:p.id, txt:(p.nama_paket + ' - ' + p.harga)};}) },
+
+      { name:'sales_id', label:'Sales', type:'select',
+        options:(refData.sales||[]).map(function(s){return {val:s.id, txt:s.nama};}) },
+
+      // update: catatan tambahan
+      { name:'catatan', label:'Catatan Tambahan', type:'textarea', req:false },
+
+      { name:'foto_ktp', label:'Foto KTP', type:'file', req:true },
+      { name:'foto_rumah', label:'Foto Rumah', type:'file', req:true }
+    ];
+
+    if (currentUser.role === 'Admin'){
+      fields.push(
+        { name:'username', label:'Nomor Internet', type:'text', req:true },
+        { name:'password', label:'Password', type:'text', req:true },
+        { name:'status', label:'Status', type:'select', options:[
+          {val:'Antrian', txt:'Antrian (Belum Aktif)'},
+          {val:'Aktif', txt:'Aktif'},
+          {val:'Non-Aktif', txt:'Non-Aktif'}
+        ]}
+      );
+    } else if (currentUser.role === 'Sales'){
+      fields.push({ name:'status', type:'hidden', value:'Antrian' });
+    }
+  }
+  else if (tableName === 'tickets'){
+    fields = [
+      { name:'judul_laporan', label:'Kendala / Masalah', type:'text', req:true },
+      { name:'pelanggan_id', label:'Pelanggan (Opsional)', type:'select',
+        options:[{val:'',txt:'- Pilih -'}].concat((refData.customers||[]).map(function(c){return {val:c.id, txt:c.nama};})) },
+      { name:'teknisi_id', label:'Assign Teknisi', type:'select',
+        options:[{val:'',txt:'- Pilih -'}].concat((refData.teknisi||[]).map(function(t){return {val:t.id, txt:t.nama};})) },
+      { name:'status', label:'Status', type:'select', options:[
+        {val:'Open', txt:'Open'},
+        {val:'Proses', txt:'Proses'},
+        {val:'Selesai', txt:'Selesai'}
+      ]},
+      { name:'keterangan_teknisi', label:'Catatan Teknisi', type:'textarea' }
+    ];
+  }
+  else if (tableName === 'announcements'){
+    fields = [
+      { name:'judul', label:'Judul Pengumuman', type:'text', req:true },
+      { name:'target', label:'Target', type:'select', options:[
+        {val:'Semua', txt:'Semua'},
+        {val:'Pelanggan', txt:'Pelanggan'},
+        {val:'Sales', txt:'Sales'},
+        {val:'Teknisi', txt:'Teknisi'}
+      ]},
+      { name:'isi', label:'Isi Pengumuman', type:'textarea', req:true }
+    ];
+  }
+  else if (tableName === 'tutorials'){
+    fields = [
+      { name:'judul', label:'Judul Tutorial', type:'text', req:true },
+      { name:'kategori', label:'Kategori', type:'select', options:[
+        {val:'Pelanggan', txt:'Pelanggan'},
+        {val:'Teknisi', txt:'Teknisi'},
+        {val:'Sales', txt:'Sales'}
+      ]},
+      { name:'link_isi', label:'Link Video / Isi Teks', type:'textarea', req:true }
+    ];
+  }
+  else if (tableName === 'reports'){
+    fields = [
+      { name:'jenis_laporan', label:'Jenis Laporan', type:'select', options:[
+        {val:'Pemasukan', txt:'Pemasukan'},
+        {val:'Pengeluaran', txt:'Pengeluaran'}
+      ]},
+      { name:'jumlah', label:'Nominal (Angka)', type:'number', req:true },
+      { name:'keterangan', label:'Keterangan Transaksi', type:'textarea', req:true }
+    ];
+  }
+  else if (tableName === 'packages'){
+    fields = [
+      { name:'nama_paket', label:'Nama Paket', type:'text', req:true },
+      { name:'harga', label:'Harga (Rp)', type:'number', req:true },
+      { name:'bandwidth', label:'Bandwidth', type:'text', req:true, placeholder:'Contoh: 10 Mbps' },
+      { name:'status_aktif', label:'Status Paket', type:'select', options:[
+        {val:'Aktif', txt:'Aktif'},
+        {val:'Non-Aktif', txt:'Non-Aktif'}
+      ]},
+      { name:'ketersediaan', label:'Ketersediaan Pendaftaran', type:'select', options:[
+        {val:'Tersedia', txt:'Tersedia (Bisa Daftar Baru)'},
+        {val:'Tidak Tersedia', txt:'Tidak Tersedia (Khusus Lama)'}
+      ]}
+    ];
+  }
+  else if (tableName === 'locations'){
+    fields = [
+      { name:'nama_blok', label:'Nama Blok', type:'text', req:true },
+      { name:'keterangan', label:'Keterangan', type:'text' }
+    ];
+  }
+  else if (tableName === 'users'){
+    fields = [
+      { name:'nama', label:'Nama Lengkap', type:'text', req:true },
+      { name:'username', label:'Username', type:'text', req:true },
+      { name:'password', label:'Password', type:'text', req:true },
+      { name:'email', label:'Email Google', type:'email', req:true, placeholder:'Contoh: nama@gmail.com' },
+      { name:'role', label:'Role', type:'select', options:[
+        {val:'Admin', txt:'Admin'},
+        {val:'Teknisi', txt:'Teknisi'},
+        {val:'Sales', txt:'Sales'}
+      ]},
+      { name:'telp', label:'No HP', type:'text', req:true }
+    ];
+  }
+
+  // render inputs
+  fields.forEach(function(f){
+    if (f.type === 'hidden'){
+      var hid = document.createElement('input');
+      hid.type = 'hidden';
+      hid.name = f.name;
+      hid.value = item ? (item[f.name] || '') : (f.value || '');
+      form.appendChild(hid);
+      return;
+    }
+
+    var inputHtml = '';
+    var val = item ? (item[f.name] || '') : '';
+
+    if (f.type === 'coords'){
+      var latVal = item ? (item[f.latName] || '') : '';
+      var lngVal = item ? (item[f.lngName] || '') : '';
+      inputHtml =
+        '<div class="grid grid-cols-1 md:grid-cols-12 gap-2">' +
+          '<div class="md:col-span-5">' +
+            '<input type="text" name="' + f.latName + '" value="' + escapeHtml(latVal) + '" readonly placeholder="-6.200000" class="w-full border rounded-lg px-3 py-2 outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500">' +
+            '<p class="text-xs text-gray-400 mt-1">Latitude</p>' +
+          '</div>' +
+          '<div class="md:col-span-5">' +
+            '<input type="text" name="' + f.lngName + '" value="' + escapeHtml(lngVal) + '" readonly placeholder="106.816666" class="w-full border rounded-lg px-3 py-2 outline-none bg-gray-50 focus:ring-2 focus:ring-blue-500">' +
+            '<p class="text-xs text-gray-400 mt-1">Longitude</p>' +
+          '</div>' +
+          '<div class="md:col-span-2 flex md:block">' +
+            '<button type="button" onclick="openMapPicker(\'' + f.latName + '\',\'' + f.lngName + '\')" class="w-full px-4 py-2 rounded-lg border border-blue-600 text-blue-700 hover:bg-blue-50 font-medium">Pilih</button>' +
+          '</div>' +
+        '</div>' +
+        '<p class="text-xs text-gray-500 mt-2">Pilih koordinat dari peta satelit untuk memudahkan mapping pelanggan.</p>';
+    }
+    else if (f.type === 'select'){
+      var opts = (f.options || []).map(function(o){
+        var sel = (String(val) === String(o.val)) ? ' selected' : '';
+        return '<option value="' + escapeHtml(o.val) + '"' + sel + '>' + escapeHtml(o.txt) + '</option>';
+      }).join('');
+      inputHtml = '<select name="' + f.name + '" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">' + opts + '</select>';
+    }
+    else if (f.type === 'textarea'){
+      inputHtml = '<textarea name="' + f.name + '" rows="3" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"' + (f.req ? ' required' : '') + '>' + escapeHtml(val) + '</textarea>';
+    }
+    else if (f.type === 'file'){
+      inputHtml = '<input type="file" name="' + f.name + '" accept="image/*" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"' + ((!item && f.req) ? ' required' : '') + '>';
+      if (item && item[f.name]){
+        inputHtml += '<div class="mt-1 text-xs text-gray-500">File saat ini: <a href="' + escapeHtml(item[f.name]) + '" target="_blank" class="text-blue-600 hover:underline">Lihat Foto</a></div>';
+      }
+    }
+    else {
+      inputHtml = '<input type="' + f.type + '" name="' + f.name + '" value="' + escapeHtml(val) + '" placeholder="' + escapeHtml(f.placeholder || '') + '" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"' + (f.req ? ' required' : '') + '>';
+    }
+
+    var div = document.createElement('div');
+    div.innerHTML = '<label class="block text-sm font-medium text-gray-700 mb-1">' + escapeHtml(f.label) + '</label>' + inputHtml;
+    form.appendChild(div);
+  });
+
+  document.getElementById('modalForm').classList.remove('hidden');
+}
+
+function closeModal(){
+  document.getElementById('modalForm').classList.add('hidden');
+}
+
+/* ===========================
+   MAP PICKER (SATELLITE)
+=========================== */
+var mapPicker = null;
+var mapMarker = null;
+var mapPicked = { lat:null, lng:null };
+var targetLatName = null;
+var targetLngName = null;
+
+function openMapPicker(latName, lngName){
+  targetLatName = latName;
+  targetLngName = lngName;
+
+  document.getElementById('mapPickerModal').classList.remove('hidden');
+
+  setTimeout(function(){
+    if (!mapPicker) initMapPicker();
+
+    var form = document.getElementById('dynamicForm');
+    var latEl = form.querySelector('[name="' + latName + '"]');
+    var lngEl = form.querySelector('[name="' + lngName + '"]');
+    var lat = latEl && latEl.value ? parseFloat(latEl.value) : NaN;
+    var lng = lngEl && lngEl.value ? parseFloat(lngEl.value) : NaN;
+
+    if (!isNaN(lat) && !isNaN(lng)) setMapPicked(lat, lng, true);
+    else useMyLocation(true);
+
+    mapPicker.invalidateSize();
+    lucide.createIcons();
+  }, 200);
+}
+
+function closeMapPicker(){
+  document.getElementById('mapPickerModal').classList.add('hidden');
+}
+
+function initMapPicker(){
+  mapPicker = L.map('mapPicker', { zoomControl:true }).setView([-6.200000, 106.816666], 14);
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles © Esri'
+  }).addTo(mapPicker);
+
+  mapMarker = L.marker(mapPicker.getCenter(), { draggable:true }).addTo(mapPicker);
+
+  mapMarker.on('dragend', function(){
+    var p = mapMarker.getLatLng();
+    setMapPicked(p.lat, p.lng, false);
+  });
+
+  mapPicker.on('click', function(e){
+    setMapPicked(e.latlng.lat, e.latlng.lng, true);
+  });
+
+  var c = mapPicker.getCenter();
+  setMapPicked(c.lat, c.lng, false);
+}
+
+function setMapPicked(lat, lng, pan){
+  mapPicked.lat = lat;
+  mapPicked.lng = lng;
+
+  var ll = L.latLng(lat, lng);
+  if (mapMarker) mapMarker.setLatLng(ll);
+  if (pan && mapPicker) mapPicker.setView(ll, Math.max(mapPicker.getZoom(), 16));
+
+  document.getElementById('mapPickedText').textContent = lat.toFixed(6) + ', ' + lng.toFixed(6);
+
+  var g = document.getElementById('mapOpenGmaps');
+  g.href = 'https://www.google.com/maps?q=' + lat + ',' + lng;
+  g.classList.remove('hidden');
+}
+
+function applyPickedCoords(){
+  var form = document.getElementById('dynamicForm');
+  if (!form || mapPicked.lat == null || mapPicked.lng == null) return;
+
+  var latEl = form.querySelector('[name="' + targetLatName + '"]');
+  var lngEl = form.querySelector('[name="' + targetLngName + '"]');
+  if (latEl) latEl.value = mapPicked.lat.toFixed(6);
+  if (lngEl) lngEl.value = mapPicked.lng.toFixed(6);
+
+  closeMapPicker();
+}
+
+async function searchOnMap(){
+  var q = (document.getElementById('mapSearchInput').value || '').trim();
+  if (!q) return;
+
+  try {
+    var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
+    var res = await fetch(url, { headers: { 'Accept-Language': 'id' } });
+    var data = await res.json();
+    if (!data || !data.length) {
+      Swal.fire('Tidak ditemukan', 'Coba kata kunci lain (misal: nama desa + kecamatan).', 'info');
+      return;
+    }
+    var lat = parseFloat(data[0].lat);
+    var lon = parseFloat(data[0].lon);
+    setMapPicked(lat, lon, true);
+  } catch (e) {
+    Swal.fire('Error', 'Gagal mencari lokasi: ' + e, 'error');
+  }
+}
+
+function useMyLocation(silent){
+  if (!navigator.geolocation){
+    if (!silent) Swal.fire('Tidak didukung', 'Browser tidak mendukung geolocation.', 'info');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    function(pos){
+      setMapPicked(pos.coords.latitude, pos.coords.longitude, true);
+    },
+    function(err){
+      if (!silent) Swal.fire('Gagal', 'Tidak bisa mengambil lokasi: ' + err.message, 'info');
+      setMapPicked(-6.200000, 106.816666, true);
+    },
+    { enableHighAccuracy:true, timeout:8000 }
+  );
+}
+
+/* ===========================
+   FILE HANDLING
+=========================== */
+function readFile(file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(){
+      var base64 = String(reader.result).split(',')[1];
+      resolve({ isFile:true, name:file.name, mimeType:file.type, data:base64 });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ===========================
+   SUBMIT FORM (CRUD)
+=========================== */
+async function handleFormSubmit(e){
+  e.preventDefault();
+  var form = e.target;
+  var tableName = form.dataset.table;
+  var formData = new FormData(form);
+  var dataObj = {};
+
+  startLoading('Membaca data & upload...');
+
+  // NOTE: file field tetap jalan
+  for (var pair of formData.entries()){
+    var key = pair[0];
+    var value = pair[1];
+
+    if (value instanceof File && value.size > 0){
+      try { dataObj[key] = await readFile(value); }
+      catch (err){
+        endLoading();
+        Swal.fire('Error', 'Gagal membaca file: ' + err, 'error');
+        return;
+      }
+    } else {
+      dataObj[key] = value;
+    }
+  }
+
+  if (isPreview){
+    if (currentEditId){
+      var idx = (mockDB[tableName] || []).findIndex(function(x){return x.id === currentEditId;});
+      if (idx >= 0) mockDB[tableName][idx] = Object.assign({}, mockDB[tableName][idx], dataObj);
+    } else {
+      dataObj.id = 'id_' + Math.random().toString(36).slice(2,8);
+      mockDB[tableName] = mockDB[tableName] || [];
+      mockDB[tableName].push(dataObj);
+    }
+    endLoading();
+    closeModal();
+    Swal.fire('Sukses', 'Data tersimpan (Preview).', 'success');
+    loadReferenceData(function(){
+      loadTableData(tableName);
+      refreshDashboardStats();
+    });
+    return;
+  }
+
+  if (currentEditId){
+    google.script.run
+      .withSuccessHandler(function(res){
+        endLoading();
+        if (res && res.success){
+          closeModal();
+          Swal.fire('Sukses', 'Data berhasil diupdate!', 'success');
+          loadReferenceData(function(){
+            loadTableData(tableName);
+            refreshDashboardStats();
+          });
+        } else {
+          Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal update', 'error');
         }
-
-        // --- UTILS ---
-        function startLoading(text = 'Memproses...') {
-            document.getElementById('loadingText').textContent = text;
-            document.getElementById('loadingOverlay').classList.remove('hidden');
+      })
+      .withFailureHandler(function(err){
+        endLoading();
+        Swal.fire('Error', String(err), 'error');
+      })
+      .updateData(tableName, currentEditId, dataObj);
+  } else {
+    google.script.run
+      .withSuccessHandler(function(res){
+        endLoading();
+        if (res && res.success){
+          closeModal();
+          Swal.fire('Sukses', 'Data berhasil ditambahkan!', 'success');
+          loadReferenceData(function(){
+            loadTableData(tableName);
+            refreshDashboardStats();
+          });
+        } else {
+          Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal simpan', 'error');
         }
+      })
+      .withFailureHandler(function(err){
+        endLoading();
+        Swal.fire('Error', String(err), 'error');
+      })
+      .saveData(tableName, dataObj);
+  }
+}
 
-        function endLoading() {
-            document.getElementById('loadingOverlay').classList.add('hidden');
-        }
+/* ===========================
+   DELETE
+=========================== */
+function confirmDelete(tableName, id){
+  Swal.fire({
+    title: 'Hapus data?',
+    text: 'Data yang dihapus tidak bisa dikembalikan.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, hapus',
+    cancelButtonText: 'Batal'
+  }).then(function(res){
+    if (res.isConfirmed) doDelete(tableName, id);
+  });
+}
 
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('-translate-x-full');
-        }
+function doDelete(tableName, id){
+  startLoading('Menghapus data...');
 
-        // --- AUTH ---
-        function checkLoginState() {
-            const saved = localStorage.getItem('jln_session');
-            if (saved) {
-                currentUser = JSON.parse(saved);
-                showMainApp();
-            } else {
-                showLogin();
-            }
-        }
+  if (isPreview){
+    mockDB[tableName] = (mockDB[tableName] || []).filter(function(x){return x.id !== id;});
+    endLoading();
+    Swal.fire('Sukses', 'Data terhapus (Preview).', 'success');
+    loadReferenceData(function(){
+      loadTableData(tableName);
+      refreshDashboardStats();
+    });
+    return;
+  }
 
-        function showLogin() {
-            document.getElementById('loginView').classList.remove('hidden');
-            document.getElementById('mainView').classList.add('hidden');
-        }
+  google.script.run
+    .withSuccessHandler(function(res){
+      endLoading();
+      if (res && res.success){
+        Swal.fire('Sukses', 'Data berhasil dihapus!', 'success');
+        loadReferenceData(function(){
+          loadTableData(tableName);
+          refreshDashboardStats();
+        });
+      } else {
+        Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal hapus', 'error');
+      }
+    })
+    .withFailureHandler(function(err){
+      endLoading();
+      Swal.fire('Error', String(err), 'error');
+    })
+    .deleteData(tableName, id);
+}
+</script>
 
-        function showMainApp() {
-            document.getElementById('loginView').classList.add('hidden');
-            document.getElementById('mainView').classList.remove('hidden');
-            document.getElementById('userNameDisplay').textContent = currentUser.nama;
-            document.getElementById('userRoleDisplay').textContent = currentUser.role;
-            document.getElementById('userInitial').textContent = currentUser.nama.charAt(0);
-            renderSidebarLinks();
-            navigateTo('Dashboard');
-        }
-
-        function handleLogin(e) {
-            e.preventDefault();
-            const u = document.getElementById('loginUsername').value;
-            const p = document.getElementById('loginPassword').value;
-            startLoading('Login...');
-
-            if (typeof google === 'undefined') {
-                setTimeout(() => {
-                    const user = mockDB.users.find(x => x.username === u && x.password === p);
-                    endLoading();
-                    if (user) loginSuccess(user);
-                    else Swal.fire('Error', 'User/Pass Salah (Coba: admin/Admin2024!)', 'error');
-                }, 800);
-            } else {
-                google.script.run
-                    .withSuccessHandler(res => {
-                        endLoading();
-                        if (res.success) loginSuccess(res.user);
-                        else Swal.fire('Gagal', res.message, 'error');
-                    })
-                    .withFailureHandler(err => { endLoading(); Swal.fire('Error', err.message, 'error'); })
-                    .loginUser({username: u, password: p});
-            }
-        }
-
-        function loginSuccess(user) {
-            currentUser = user;
-            localStorage.setItem('jln_session', JSON.stringify(user));
-            showMainApp();
-        }
-
-        function handleLogout() {
-            localStorage.removeItem('jln_session');
-            currentUser = null;
-            showLogin();
-        }
-
-        // --- NAVIGATION & FULL MENU CONFIG ---
-        const menuConfig = {
-            'Admin': [
-                { id: 'Dashboard', icon: 'layout-dashboard' },
-                { id: 'Pelanggan', icon: 'users', table: 'customers' },
-                { id: 'Lokasi', icon: 'map-pin', table: 'locations' },
-                { id: 'Paket', icon: 'package', table: 'packages' },
-                { id: 'Users', icon: 'user-cog', table: 'users' },
-                { id: 'Laporan', icon: 'file-bar-chart', table: 'reports' },
-                { id: 'Tickets', icon: 'ticket', table: 'tickets' },
-                { id: 'Pengumuman', icon: 'megaphone', table: 'announcements' },
-                { id: 'Tutorial', icon: 'book-open', table: 'tutorials' }
-            ],
-            'Teknisi': [
-                { id: 'Dashboard', icon: 'layout-dashboard' },
-                { id: 'Tickets', icon: 'wrench', table: 'tickets' }, 
-                { id: 'Tutorial', icon: 'book-open', table: 'tutorials' },
-                { id: 'Profil', icon: 'user' }
-            ],
-            'Sales': [
-                { id: 'Dashboard', icon: 'layout-dashboard' },
-                { id: 'Pelanggan', icon: 'users', table: 'customers' },
-                { id: 'Laporan', icon: 'dollar-sign', table: 'reports' },
-                { id: 'Tutorial', icon: 'book-open', table: 'tutorials' },
-                { id: 'Profil', icon: 'user' }
-            ],
-            'Pelanggan': [
-                { id: 'Dashboard', icon: 'layout-dashboard' },
-                { id: 'PaketSaya', icon: 'wifi' },
-                { id: 'Tickets', icon: 'help-circle', table: 'tickets' },
-                { id: 'Tutorial', icon: 'book-open', table: 'tutorials' },
-                { id: 'Profil', icon: 'user' }
-            ]
-        };
-
-        function renderSidebarLinks() {
-            const nav = document.getElementById('navLinks');
-            nav.innerHTML = '';
-            const menus = menuConfig[currentUser.role] || [];
-            menus.forEach(m => {
-                const btn = document.createElement('button');
-                btn.className = `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-gray-600 hover:bg-gray-100 hover:text-blue-600 mb-1`;
-                btn.onclick = () => navigateTo(m.id);
-                btn.innerHTML = `<i data-lucide="${m.icon}" class="w-5 h-5"></i> <span class="font-medium">${m.id}</span>`;
-                btn.id = `nav-${m.id}`;
-                nav.appendChild(btn);
-            });
-            lucide.createIcons();
-        }
-
-        function navigateTo(viewId) {
-            currentView = viewId;
-            document.getElementById('viewTitle').textContent = viewId;
-            document.querySelectorAll('#navLinks button').forEach(b => b.classList.remove('sidebar-active', 'bg-blue-50', 'text-blue-600'));
-            const activeBtn = document.getElementById(`nav-${viewId}`);
-            if (activeBtn) activeBtn.classList.add('sidebar-active');
-            
-            const container = document.getElementById('content');
-            container.innerHTML = `<div class="p-12 text-center"><div class="animate-spin inline-block h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div></div>`;
-            
-            if (window.innerWidth < 768) document.getElementById('sidebar').classList.add('-translate-x-full');
-
-            if (typeof google === 'undefined') {
-                renderViewRouter(viewId);
-            } else {
-                google.script.run.withSuccessHandler(res => {
-                    refData = res;
-                    renderViewRouter(viewId);
-                }).getReferenceData();
-            }
-        }
-
-        function renderViewRouter(viewId) {
-            const container = document.getElementById('content');
-            if (viewId === 'Dashboard') return renderDashboard(container);
-            if (viewId === 'Profil') return renderProfile(container);
-            
-            // FULL CRUD ROUTER
-            switch(viewId) {
-                case 'Pelanggan':
-                    renderCRUDTable('customers', 'Manajemen Pelanggan', [
-                        {key:'nama', label:'Nama'}, 
-                        {key:'username', label:'No. Internet'}, 
-                        {key:'alamat', label:'Alamat'}, 
-                        {key:'status', label:'Status', type:'badge'}, 
-                        {key:'telp', label:'Telp'}
-                    ]);
-                    break;
-                case 'Paket':
-                    renderCRUDTable('packages', 'Daftar Paket Internet', [
-                        {key:'nama_paket', label:'Nama Paket'}, {key:'harga', label:'Harga', type:'money'}, 
-                        {key:'bandwidth', label:'Bandwidth'}, 
-                        {key:'status_aktif', label:'Status', type:'badge'},
-                        {key:'ketersediaan', label:'Ketersediaan', type:'badge'}
-                    ]);
-                    break;
-                case 'Lokasi':
-                    renderCRUDTable('locations', 'Data Blok / Coverage', [
-                        {key:'nama_blok', label:'Nama Blok'}, {key:'keterangan', label:'Keterangan'}
-                    ]);
-                    break;
-                case 'Users':
-                    renderCRUDTable('users', 'Staff & User System', [
-                        {key:'nama', label:'Nama'}, {key:'email', label:'Email Google'}, 
-                        {key:'role', label:'Role', type:'badge'}, {key:'telp', label:'Telp'}
-                    ]);
-                    break;
-                case 'Tickets':
-                    renderCRUDTable('tickets', 'Tiket Gangguan', [
-                        {key:'judul_laporan', label:'Masalah'}, {key:'status', label:'Status', type:'badge'},
-                        {key:'created_at', label:'Tanggal'}
-                    ]);
-                    break;
-                case 'Pengumuman':
-                    renderCRUDTable('announcements', 'Pengumuman', [
-                        {key:'judul', label:'Judul'}, {key:'target', label:'Target'}, {key:'isi', label:'Isi'}
-                    ]);
-                    break;
-                case 'Tutorial':
-                    renderCRUDTable('tutorials', 'Tutorial / Panduan', [
-                        {key:'judul', label:'Judul'}, {key:'kategori', label:'Kategori'}, {key:'link_isi', label:'Link/Isi'}
-                    ]);
-                    break;
-                case 'Laporan':
-                    renderCRUDTable('reports', 'Laporan Keuangan/Teknis', [
-                        {key:'jenis_laporan', label:'Jenis'}, {key:'jumlah', label:'Nominal', type:'money'}, {key:'keterangan', label:'Ket'}
-                    ]);
-                    break;
-                default:
-                    container.innerHTML = `<div class="text-center p-10 text-gray-500">Modul ${viewId} siap digunakan.</div>`;
-            }
-        }
-
-        // --- GENERIC CRUD UI WITH SEARCH, SORT, FILTER ---
-        function renderCRUDTable(tableName, title, columns) {
-            const container = document.getElementById('content');
-            
-            // Reset Table State
-            globalTableData = [];
-            globalTableConfig = { tableName, columns };
-            tableState = { search: '', sortKey: null, sortDir: 'asc', filterStatus: '' };
-
-            startLoading('Mengambil Data...');
-
-            const processData = (data) => {
-                endLoading();
-                globalTableData = data;
-
-                // Render Container & Controls
-                container.innerHTML = `
-                    <div class="space-y-6">
-                        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                            <h2 class="text-2xl font-bold text-gray-800">${title}</h2>
-                            <button onclick="openForm('${tableName}')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg transition-all">
-                                <i data-lucide="plus-circle" class="w-5 h-5"></i> Tambah Data
-                            </button>
-                        </div>
-
-                        <div class="bg-white p-4 rounded-xl shadow-sm border flex flex-col md:flex-row gap-4 justify-between items-center">
-                            <div class="relative w-full md:w-64">
-                                <i data-lucide="search" class="absolute left-3 top-2.5 text-gray-400 w-5 h-5"></i>
-                                <input type="text" placeholder="Cari data..." oninput="handleTableSearch(this.value)" class="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                            </div>
-                            
-                            <div class="flex gap-2 w-full md:w-auto">
-                                ${columns.some(c => c.key === 'status') ? `
-                                <select onchange="handleTableFilter(this.value)" class="border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600 text-sm w-full md:w-auto">
-                                    <option value="">Semua Status</option>
-                                    <option value="Aktif">Aktif</option>
-                                    <option value="Non-Aktif">Non-Aktif</option>
-                                    <option value="Antrian">Antrian</option>
-                                    <option value="Isolir">Isolir</option>
-                                    <option value="Open">Open (Ticket)</option>
-                                    <option value="Selesai">Selesai (Ticket)</option>
-                                </select>
-                                ` : ''}
-                            </div>
-                        </div>
-
-                        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
-                            <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            ${columns.map(c => `
-                                                <th onclick="handleTableSort('${c.key}')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sortable group">
-                                                    <div class="flex items-center gap-1">
-                                                        ${c.label}
-                                                        <i data-lucide="arrow-up-down" class="w-3 h-3 text-gray-300 group-hover:text-gray-600"></i>
-                                                    </div>
-                                                </th>
-                                            `).join('')}
-                                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tableBody" class="bg-white divide-y divide-gray-200">
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="tableFooter" class="p-4 text-sm text-gray-500 border-t bg-gray-50 flex justify-between items-center">
-                                <span>Menampilkan data...</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                
-                renderTableBody(); 
-                lucide.createIcons();
-            };
-
-            if (typeof google === 'undefined') {
-                processData(mockDB[tableName] || []);
-            } else {
-                google.script.run
-                    .withSuccessHandler(processData)
-                    .withFailureHandler(err => { endLoading(); Swal.fire('Error', err.message, 'error'); })
-                    .getSheetData(tableName);
-            }
-        }
-
-        // --- TABLE LOGIC HELPERS ---
-        function handleTableSearch(val) {
-            tableState.search = val.toLowerCase();
-            renderTableBody();
-        }
-
-        function handleTableFilter(val) {
-            tableState.filterStatus = val;
-            renderTableBody();
-        }
-
-        function handleTableSort(key) {
-            if (tableState.sortKey === key) {
-                tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
-            } else {
-                tableState.sortKey = key;
-                tableState.sortDir = 'asc';
-            }
-            renderTableBody();
-        }
-
-        function renderTableBody() {
-            const tbody = document.getElementById('tableBody');
-            const footer = document.getElementById('tableFooter');
-            if(!tbody) return;
-
-            let filtered = globalTableData.filter(item => {
-                if (tableState.filterStatus && item.status !== tableState.filterStatus) return false;
-                if (tableState.search) {
-                    return Object.values(item).some(val => 
-                        String(val).toLowerCase().includes(tableState.search)
-                    );
-                }
-                return true;
-            });
-
-            if (tableState.sortKey) {
-                filtered.sort((a, b) => {
-                    let valA = a[tableState.sortKey] || '';
-                    let valB = b[tableState.sortKey] || '';
-                    if (typeof valA === 'string') valA = valA.toLowerCase();
-                    if (typeof valB === 'string') valB = valB.toLowerCase();
-                    if (valA < valB) return tableState.sortDir === 'asc' ? -1 : 1;
-                    if (valA > valB) return tableState.sortDir === 'asc' ? 1 : -1;
-                    return 0;
-                });
-            }
-
-            if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${globalTableConfig.columns.length + 1}" class="p-8 text-center text-gray-400">Data tidak ditemukan.</td></tr>`;
-                footer.innerHTML = `<span>Menampilkan <b>0</b> data</span>`;
-                return;
-            }
-
-            tbody.innerHTML = filtered.map(item => {
-                let tds = globalTableConfig.columns.map(col => {
-                    let val = item[col.key] || '-'; 
-                    if (col.type === 'money') val = 'Rp ' + parseInt(val !== '-' ? val : 0).toLocaleString('id-ID');
-                    if (col.type === 'badge') {
-                        let color = 'gray';
-                        if(['Aktif', 'Selesai', 'Tersedia'].includes(val)) color = 'green';
-                        if(['Open', 'Isolir', 'Tidak Tersedia', 'Non-Aktif'].includes(val)) color = 'red';
-                        if(['Proses', 'Antrian'].includes(val)) color = 'blue'; 
-                        val = `<span class="px-2 py-1 rounded-full text-xs font-bold bg-${color}-100 text-${color}-700">${val}</span>`;
-                    }
-                    return `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${val}</td>`;
-                }).join('');
-                
-                const itemStr = JSON.stringify(item).replace(/"/g, '&quot;');
-                const actions = `
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="openForm('${globalTableConfig.tableName}', ${itemStr})" class="text-blue-600 hover:text-blue-900 mr-3"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                        <button onclick="confirmDelete('${globalTableConfig.tableName}', '${item.id}')" class="text-red-600 hover:text-red-900"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                    </td>`;
-                return `<tr class="hover:bg-gray-50 transition-colors border-b last:border-0">${tds}${actions}</tr>`;
-            }).join('');
-            
-            footer.innerHTML = `<span>Menampilkan <b>${filtered.length}</b> dari <b>${globalTableData.length}</b> data</span>`;
-            lucide.createIcons(); 
-        }
-
-        // --- DYNAMIC FORM FIELDS ---
-        function openForm(tableName, item = null) {
-            currentEditId = item ? item.id : null;
-            document.getElementById('modalTitle').textContent = item ? `Edit ${tableName}` : `Tambah ${tableName}`;
-            const form = document.getElementById('dynamicForm');
-            form.innerHTML = ''; 
-            form.dataset.table = tableName;
-
-            let fields = [];
-            // --- FIELD DEFINITIONS ---
-            if (tableName === 'customers') {
-                fields = [
-                    { name: 'nama', label: 'Nama Lengkap', type: 'text', req: true },
-                    { name: 'telp', label: 'WhatsApp', type: 'text', req: true },
-                    { name: 'alamat', label: 'Alamat', type: 'textarea', req: true },
-                    { name: 'lokasi_id', label: 'Lokasi (Blok)', type: 'select', options: refData.locations.map(l => ({val: l.id, txt: `${l.nama_blok}`})) }, 
-                    { name: 'paket_id', label: 'Paket', type: 'select', options: refData.packages.map(p => ({val: p.id, txt: `${p.nama_paket} - ${p.harga}`})) },
-                    { name: 'sales_id', label: 'Sales', type: 'select', options: refData.sales.map(s => ({val: s.id, txt: s.nama})) },
-                    { name: 'foto_ktp', label: 'Foto KTP', type: 'file', req: true }, // ADDED FILE INPUT
-                    { name: 'foto_rumah', label: 'Foto Rumah', type: 'file', req: true } // ADDED FILE INPUT
-                ];
-
-                if (currentUser.role === 'Admin') {
-                    fields.push(
-                        { name: 'username', label: 'Nomor Internet', type: 'text', req: true }, 
-                        { name: 'password', label: 'Password', type: 'text', req: true },
-                        { name: 'status', label: 'Status', type: 'select', options: [{val:'Antrian', txt:'Antrian (Belum Aktif)'}, {val:'Aktif', txt:'Aktif'}, {val:'Non-Aktif', txt:'Non-Aktif'}] }
-                    );
-                } else if (currentUser.role === 'Sales') {
-                    fields.push(
-                        { name: 'status', type: 'hidden', value: 'Antrian' }
-                    );
-                }
-
-            } else if (tableName === 'tickets') {
-                fields = [
-                    { name: 'judul_laporan', label: 'Kendala / Masalah', type: 'text', req: true },
-                    { name: 'pelanggan_id', label: 'Pelanggan (Opsional)', type: 'select', options: [{val:'',txt:'- Pilih -'}, ...refData.customers.map(c => ({val: c.id, txt: c.nama}))] },
-                    { name: 'teknisi_id', label: 'Assign Teknisi', type: 'select', options: [{val:'',txt:'- Pilih -'}, ...refData.teknisi.map(t => ({val: t.id, txt: t.nama}))] },
-                    { name: 'status', label: 'Status', type: 'select', options: [{val:'Open', txt:'Open'}, {val:'Proses', txt:'Proses'}, {val:'Selesai', txt:'Selesai'}] },
-                    { name: 'keterangan_teknisi', label: 'Catatan Teknisi', type: 'textarea' }
-                ];
-            } else if (tableName === 'announcements') {
-                fields = [
-                    { name: 'judul', label: 'Judul Pengumuman', type: 'text', req: true },
-                    { name: 'target', label: 'Target', type: 'select', options: [{val:'Semua', txt:'Semua'}, {val:'Pelanggan', txt:'Pelanggan'}, {val:'Sales', txt:'Sales'}, {val:'Teknisi', txt:'Teknisi'}] },
-                    { name: 'isi', label: 'Isi Pengumuman', type: 'textarea', req: true }
-                ];
-            } else if (tableName === 'tutorials') {
-                fields = [
-                    { name: 'judul', label: 'Judul Tutorial', type: 'text', req: true },
-                    { name: 'kategori', label: 'Kategori', type: 'select', options: [{val:'Pelanggan', txt:'Pelanggan'}, {val:'Teknisi', txt:'Teknisi'}, {val:'Sales', txt:'Sales'}] },
-                    { name: 'link_isi', label: 'Link Video / Isi Teks', type: 'textarea', req: true }
-                ];
-            } else if (tableName === 'reports') {
-                fields = [
-                    { name: 'jenis_laporan', label: 'Jenis Laporan', type: 'select', options: [{val:'Pemasukan', txt:'Pemasukan'}, {val:'Pengeluaran', txt:'Pengeluaran'}] },
-                    { name: 'jumlah', label: 'Nominal (Angka)', type: 'number', req: true },
-                    { name: 'keterangan', label: 'Keterangan Transaksi', type: 'textarea', req: true }
-                ];
-            } else if (tableName === 'packages') {
-                fields = [
-                    { name: 'nama_paket', label: 'Nama Paket', type: 'text', req: true },
-                    { name: 'harga', label: 'Harga (Rp)', type: 'number', req: true },
-                    { name: 'bandwidth', label: 'Bandwidth', type: 'text', req: true, placeholder: 'Contoh: 10 Mbps' },
-                    { name: 'status_aktif', label: 'Status Paket', type: 'select', options: [{val:'Aktif', txt:'Aktif'}, {val:'Non-Aktif', txt:'Non-Aktif'}] },
-                    { name: 'ketersediaan', label: 'Ketersediaan Pendaftaran', type: 'select', options: [{val:'Tersedia', txt:'Tersedia (Bisa Daftar Baru)'}, {val:'Tidak Tersedia', txt:'Tidak Tersedia (Khusus Lama)'}] }
-                ];
-            } else if (tableName === 'locations') {
-                fields = [
-                    { name: 'nama_blok', label: 'Nama Blok', type: 'text', req: true },
-                    { name: 'keterangan', label: 'Keterangan', type: 'text' }
-                ];
-            } else if (tableName === 'users') {
-                fields = [
-                    { name: 'nama', label: 'Nama Lengkap', type: 'text', req: true },
-                    { name: 'username', label: 'Username', type: 'text', req: true },
-                    { name: 'password', label: 'Password', type: 'text', req: true },
-                    { name: 'email', label: 'Email Google', type: 'email', req: true, placeholder: 'Contoh: nama@gmail.com' },
-                    { name: 'role', label: 'Role', type: 'select', options: [{val:'Admin', txt:'Admin'}, {val:'Teknisi', txt:'Teknisi'}, {val:'Sales', txt:'Sales'}] },
-                    { name: 'telp', label: 'No HP', type: 'text', req: true }
-                ];
-            }
-
-            // Render Inputs
-            fields.forEach(f => {
-                if (f.type === 'hidden') {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = f.name;
-                    input.value = item ? item[f.name] : (f.value || '');
-                    form.appendChild(input);
-                    return; 
-                }
-
-                let inputHtml = '';
-                const val = item ? item[f.name] : '';
-                
-                if (f.type === 'select') {
-                    const opts = f.options.map(o => `<option value="${o.val}" ${val == o.val ? 'selected' : ''}>${o.txt}</option>`).join('');
-                    inputHtml = `<select name="${f.name}" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 bg-white">${opts}</select>`;
-                } else if (f.type === 'textarea') {
-                    inputHtml = `<textarea name="${f.name}" rows="3" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" ${f.req ? 'required' : ''}>${val}</textarea>`;
-                } else if (f.type === 'file') {
-                    inputHtml = `<input type="file" name="${f.name}" accept="image/*" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" ${!item && f.req ? 'required' : ''}>`;
-                    if (item && item[f.name]) {
-                       inputHtml += `<div class="mt-1 text-xs text-gray-500">File saat ini: <a href="${item[f.name]}" target="_blank" class="text-blue-600 hover:underline">Lihat Foto</a></div>`;
-                    }
-                } else {
-                    inputHtml = `<input type="${f.type}" name="${f.name}" value="${val}" placeholder="${f.placeholder || ''}" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" ${f.req ? 'required' : ''}>`;
-                }
-
-                const div = document.createElement('div');
-                div.innerHTML = `<label class="block text-sm font-medium text-gray-700 mb-1">${f.label}</label>${inputHtml}`;
-                form.appendChild(div);
-            });
-
-            document.getElementById('modalForm').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('modalForm').classList.add('hidden');
-        }
-
-        // --- FORM SUBMIT HANDLER WITH FILE SUPPORT ---
-        async function handleFormSubmit(e) {
-            e.preventDefault();
-            const form = e.target;
-            const tableName = form.dataset.table;
-            const formData = new FormData(form);
-            const dataObj = {};
-
-            startLoading('Membaca data & upload...');
-
-            // Process form data including files
-            for (let [key, value] of formData.entries()) {
-                if (value instanceof File && value.size > 0) {
-                    try {
-                        const fileData = await readFile(value);
-                        dataObj[key] = fileData; // Send file object to backend
-                    } catch (err) {
-                        endLoading();
-                        Swal.fire('Error', 'Gagal membaca file: ' + err, 'error');
-                        return;
-                    }
-                } else if (value instanceof File && value.size === 0) {
-                    // Empty file input, ignore (or handle if needed)
-                    // If editing and no file selected, backend logic should handle it (don't overwrite)
-                    dataObj[key] = ""; 
-                } else {
-                    dataObj[key] = value;
-                }
-            }
-
-            if (typeof google === 'undefined') {
-                // SIMULATION
-                setTimeout(() => {
-                    if (currentEditId) {
-                        const idx = mockDB[tableName].findIndex(x => x.id === currentEditId);
-                        if (idx !== -1) mockDB[tableName][idx] = { ...mockDB[tableName][idx], ...dataObj };
-                    } else {
-                        dataObj.id = Date.now().toString();
-                        if(!mockDB[tableName]) mockDB[tableName] = [];
-                        mockDB[tableName].push(dataObj);
-                    }
-                    closeModal();
-                    renderCRUDTable(tableName, 'Data Updated (Simulasi)', []);
-                    navigateTo(currentView);
-                    endLoading();
-                    Swal.fire('Berhasil', 'Data disimpan (Simulasi)', 'success');
-                }, 800);
-            } else {
-                // LIVE
-                const handler = currentEditId 
-                    ? google.script.run.withSuccessHandler(afterSave).updateData(tableName, currentEditId, dataObj)
-                    : google.script.run.withSuccessHandler(afterSave).saveData(tableName, dataObj);
-
-                function afterSave(res) {
-                    endLoading();
-                    if (res.success) {
-                        closeModal();
-                        Swal.fire('Berhasil', 'Data tersimpan di Database', 'success');
-                        navigateTo(currentView);
-                    } else {
-                        Swal.fire('Gagal', res.message, 'error');
-                    }
-                }
-            }
-        }
-
-        function readFile(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve({
-                    data: reader.result.split(',')[1], // Get base64 part
-                    name: file.name,
-                    mimeType: file.type,
-                    isFile: true
-                });
-                reader.onerror = error => reject(error);
-                reader.readAsDataURL(file);
-            });
-        }
-
-        // ... (Remaining functions: confirmDelete, renderDashboard, etc. stay the same)
-        
-        function confirmDelete(tableName, id) {
-            Swal.fire({
-                title: 'Hapus data ini?',
-                text: "Data yang dihapus tidak bisa dikembalikan!",
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Ya, Hapus!'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    startLoading('Menghapus...');
-                    if (typeof google === 'undefined') {
-                        mockDB[tableName] = mockDB[tableName].filter(x => x.id !== id);
-                        endLoading();
-                        Swal.fire('Terhapus', 'Data dihapus (Simulasi)', 'success');
-                        navigateTo(currentView);
-                    } else {
-                        google.script.run
-                            .withSuccessHandler(res => {
-                                endLoading();
-                                if (res.success) {
-                                    Swal.fire('Terhapus!', 'Data berhasil dihapus.', 'success');
-                                    navigateTo(currentView);
-                                } else {
-                                    Swal.fire('Gagal', res.message, 'error');
-                                }
-                            })
-                            .deleteData(tableName, id);
-                    }
-                }
-            });
-        }
-
-        function renderDashboard(container) {
-            container.innerHTML = `
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                    ${dashCard('Pelanggan', 'statCustomers', 'users', 'blue')}
-                    ${dashCard('Paket Aktif', 'statPackages', 'package', 'green')}
-                    ${dashCard('Ticket Open', 'statTickets', 'ticket', 'red')}
-                    ${dashCard('Pendapatan', 'statIncome', 'dollar-sign', 'emerald')}
-                </div>
-                <div class="bg-white p-6 rounded-2xl border shadow-sm">
-                    <h3 class="font-bold text-gray-800 mb-4">Akses Cepat</h3>
-                    <div class="flex flex-wrap gap-4">
-                        <button onclick="navigateTo('Pelanggan')" class="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-100">Tambah Pelanggan</button>
-                        <button onclick="navigateTo('Tickets')" class="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100">Lapor Gangguan</button>
-                        <button onclick="navigateTo('Laporan')" class="px-4 py-2 bg-green-50 text-green-600 rounded-lg text-sm font-medium hover:bg-green-100">Input Keuangan</button>
-                    </div>
-                </div>
-            `;
-            lucide.createIcons();
-            loadDashboardData();
-        }
-
-        function renderProfile(container) {
-            container.innerHTML = `
-                <div class="max-w-2xl mx-auto bg-white p-8 rounded-2xl border shadow-sm text-center">
-                    <div class="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
-                        <i data-lucide="user" class="w-12 h-12"></i>
-                    </div>
-                    <h2 class="text-2xl font-bold text-gray-800">${currentUser.nama}</h2>
-                    <p class="text-gray-500 mb-6">${currentUser.role} | ${currentUser.username}</p>
-                    <div class="bg-gray-50 p-4 rounded-xl text-left space-y-3">
-                        <div><label class="text-xs text-gray-400">ID Pengguna</label><p class="font-medium">${currentUser.id}</p></div>
-                        <div><label class="text-xs text-gray-400">Email Google</label><p class="font-medium">${currentUser.email || '-'}</p></div>
-                        <div><label class="text-xs text-gray-400">Nomor Telepon</label><p class="font-medium">${currentUser.telp || '-'}</p></div>
-                        <div><label class="text-xs text-gray-400">Alamat</label><p class="font-medium">${currentUser.alamat || '-'}</p></div>
-                    </div>
-                </div>
-            `;
-            lucide.createIcons();
-        }
-
-        function dashCard(label, id, icon, color) {
-            return `
-                <div class="bg-white p-6 rounded-2xl border shadow-sm flex items-center gap-4">
-                    <div class="bg-${color}-100 p-3 rounded-xl text-${color}-600"><i data-lucide="${icon}"></i></div>
-                    <div><p class="text-gray-500 text-sm">${label}</p><h4 class="text-2xl font-bold" id="${id}">0</h4></div>
-                </div>`;
-        }
-
-        function loadDashboardData() {
-            if (typeof google === 'undefined') {
-                document.getElementById('statCustomers').textContent = mockDB.customers.length;
-                document.getElementById('statPackages').textContent = mockDB.packages.length;
-                document.getElementById('statTickets').textContent = mockDB.tickets.length;
-                document.getElementById('statIncome').textContent = 'Rp 0';
-            } else {
-                google.script.run.withSuccessHandler(res => {
-                    if(res.success) {
-                        document.getElementById('statCustomers').textContent = res.customers;
-                        document.getElementById('statPackages').textContent = res.packages;
-                        document.getElementById('statTickets').textContent = res.tickets;
-                        document.getElementById('statIncome').textContent = 'Rp ' + parseInt(res.income || 0).toLocaleString('id-ID');
-                    }
-                }).getDashboardStats();
-            }
-        }
-    </script>
 </body>
 </html>

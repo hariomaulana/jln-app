@@ -200,6 +200,8 @@ window.addEventListener('unhandledrejection', function(e){
 =========================== */
 var currentUser = null;
 var isPreview = false;
+var authToken = null;
+
 var refData = { packages: [], sales: [], locations: [], teknisi: [], customers: [] };
 
 var currentEditId = null;
@@ -223,12 +225,13 @@ var mockDB = {
     {id:'l1', nama_blok:'Blok A', keterangan:'Dekat Masjid', created_at:'-'}
   ],
   customers: [
-    {id:'c1', nama:'Budi Santoso', username:'10001', password:'123', alamat:'Jl. Mawar No 1', lat:'-6.200000', lng:'106.816666', paket_id:'p1', lokasi_id:'l1', sales_id:'2', status:'Aktif', telp:'08567', foto_ktp:'', foto_rumah:'', catatan:'-'}
+    {id:'c1', nama:'Budi Santoso', username:'10001', password:'123', alamat:'Jl. Mawar No 1', lat:'-6.200000', lng:'106.816666', paket_id:'p1', lokasi_id:'l1', sales_id:'2', status:'Aktif', telp:'08567', foto_ktp:'', foto_rumah:'', catatan:'-', created_at:'-'}
   ],
   tickets: [],
   announcements: [],
   tutorials: [],
-  reports: []
+  reports: [],
+  ticket_logs: [] // PATCH A
 };
 
 /* ===========================
@@ -248,6 +251,11 @@ function escapeHtml(s){
     .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
+function truthy(v){
+  var s = String(v === undefined || v === null ? '' : v).trim().toLowerCase();
+  return ['1','true','ya','yes','y'].indexOf(s) !== -1;
+}
+
 function getById(arr, id){
   id = String(id || '');
   return (arr || []).find(function(x){ return String(x.id) === id; }) || null;
@@ -259,13 +267,153 @@ function fmtMoney(val){
   return 'Rp ' + n.toLocaleString('id-ID');
 }
 
+/* ✅ PATCH: badge tidak pakai class tailwind dinamis */
 function badge(val){
-  var v = String(val || '-');
-  var color = 'gray';
-  if (['Aktif','Selesai','Tersedia','Aktif'].indexOf(v) !== -1) color = 'green';
-  if (['Open','Isolir','Tidak Tersedia','Non-Aktif'].indexOf(v) !== -1) color = 'red';
-  if (['Proses','Antrian'].indexOf(v) !== -1) color = 'blue';
-  return '<span class="px-2 py-1 rounded-full text-xs font-bold bg-' + color + '-100 text-' + color + '-700">' + escapeHtml(v) + '</span>';
+  var v = String(val || '-').trim();
+  var cls = 'bg-gray-100 text-gray-700';
+  if (['Aktif','Selesai','Tersedia'].includes(v)) cls = 'bg-green-100 text-green-700';
+  if (['Open','Isolir','Tidak Tersedia','Non-Aktif'].includes(v)) cls = 'bg-red-100 text-red-700';
+  if (['Proses','Antrian'].includes(v)) cls = 'bg-blue-100 text-blue-700';
+  return '<span class="px-2 py-1 rounded-full text-xs font-bold '+cls+'">' + escapeHtml(v) + '</span>';
+}
+
+/* ✅ PATCH: normalisasi response getSheetData agar selalu array */
+function normalizeSheetDataResponse(res){
+  if (Array.isArray(res)) return res;
+  if (res && typeof res === 'object' && Array.isArray(res.data)) return res.data;
+  return [];
+}
+
+/* ======================================================
+   PATCH PRIORITAS 1: WAJIB GANTI PASSWORD (SweetAlert)
+====================================================== */
+function showForceChangePassword(doneCb){
+  if (isPreview){
+    Swal.fire('Info', 'Mode Preview: fitur ganti password tidak dijalankan.', 'info');
+    if (doneCb) doneCb();
+    return;
+  }
+  if (!authToken){
+    Swal.fire('Sesi', 'Token tidak ditemukan. Silakan login ulang.', 'info');
+    logout(true);
+    return;
+  }
+
+  Swal.fire({
+    title: 'Wajib Ganti Password',
+    html:
+      '<div class="text-left">' +
+        '<p class="text-sm text-gray-600 mb-3">Akun ini masih memakai password awal dari Admin. Silakan ganti password terlebih dahulu.</p>' +
+        '<label class="text-xs text-gray-500">Password Lama</label>' +
+        '<input id="cpOld" type="password" class="swal2-input" placeholder="Password lama" style="margin-top:6px;">' +
+        '<label class="text-xs text-gray-500">Password Baru</label>' +
+        '<input id="cpNew" type="password" class="swal2-input" placeholder="Minimal 6 karakter" style="margin-top:6px;">' +
+        '<label class="text-xs text-gray-500">Ulangi Password Baru</label>' +
+        '<input id="cpNew2" type="password" class="swal2-input" placeholder="Ulangi password baru" style="margin-top:6px;">' +
+      '</div>',
+    icon: 'warning',
+    confirmButtonText: 'Simpan Password Baru',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showCancelButton: false,
+    preConfirm: function(){
+      var oldP = (document.getElementById('cpOld').value || '').trim();
+      var newP = (document.getElementById('cpNew').value || '').trim();
+      var newP2 = (document.getElementById('cpNew2').value || '').trim();
+
+      if (!oldP || !newP || !newP2) {
+        Swal.showValidationMessage('Semua kolom wajib diisi.');
+        return false;
+      }
+      if (newP.length < 6) {
+        Swal.showValidationMessage('Password baru minimal 6 karakter.');
+        return false;
+      }
+      if (newP !== newP2) {
+        Swal.showValidationMessage('Ulangi password baru tidak sama.');
+        return false;
+      }
+      if (newP === oldP) {
+        Swal.showValidationMessage('Password baru tidak boleh sama dengan password lama.');
+        return false;
+      }
+
+      // return promise: panggil server
+      return new Promise(function(resolve, reject){
+        google.script.run
+          .withSuccessHandler(function(res){
+            if (res && res.success){
+              resolve(true);
+            } else {
+              reject((res && res.message) ? res.message : 'Gagal mengubah password.');
+            }
+          })
+          .withFailureHandler(function(err){
+            reject(String(err));
+          })
+          .changeOwnPassword(authToken, oldP, newP);
+      }).catch(function(errMsg){
+        Swal.showValidationMessage(String(errMsg || 'Gagal mengubah password.'));
+        return false;
+      });
+    }
+  }).then(function(result){
+    if (result.isConfirmed){
+      // tandai di client juga
+      if (currentUser) currentUser.must_change_password = '';
+      Swal.fire('Berhasil', 'Password berhasil diganti. Silakan lanjut.', 'success')
+        .then(function(){
+          if (doneCb) doneCb();
+        });
+    }
+  });
+}
+
+/* ===========================
+   AUTH RUNNER (TOKEN) - PATCH
+=========================== */
+function runAuth(fnName, args, onSuccess, onFail){
+  if (isPreview){
+    if (onFail) onFail('PREVIEW_MODE');
+    return;
+  }
+  args = args || [];
+  if (!authToken){
+    if (onFail) onFail('TOKEN_MISSING');
+    return;
+  }
+
+  var runner = google.script.run
+    .withSuccessHandler(function(res){
+      // Session expired check
+      if (res && res.message && (res.message === 'SESSION_EXPIRED' || res.message === 'TOKEN_MISSING')){
+        Swal.fire('Sesi Habis', 'Silakan login ulang.', 'info').then(function(){ logout(true); });
+        return;
+      }
+
+      // ✅ kalau server balikin {success:false,...} jangan diteruskan ke UI
+      if (res && typeof res === 'object' && res.success === false){
+        if (onFail) onFail(res.message || 'Gagal memproses permintaan.');
+        else Swal.fire('Gagal', (res.message || 'Gagal memproses permintaan.'), 'error');
+        return;
+      }
+
+      if (onSuccess) onSuccess(res);
+    })
+    .withFailureHandler(function(err){
+      if (String(err).indexOf('SESSION_EXPIRED') !== -1){
+        Swal.fire('Sesi Habis', 'Silakan login ulang.', 'info').then(function(){ logout(true); });
+        return;
+      }
+      if (onFail) onFail(err);
+    });
+
+  var callArgs = [authToken].concat(args);
+  if (!runner[fnName]) {
+    if (onFail) onFail('Function tidak ditemukan di server: ' + fnName);
+    return;
+  }
+  runner[fnName].apply(runner, callArgs);
 }
 
 /* ===========================
@@ -274,8 +422,65 @@ function badge(val){
 window.addEventListener('load', function(){
   lucide.createIcons();
   isPreview = !(window.google && google.script && google.script.run);
-  if (isPreview) document.getElementById('previewBadge').classList.remove('hidden');
+
+  if (isPreview){
+    document.getElementById('previewBadge').classList.remove('hidden');
+  } else {
+    // Optional: restore session token (kalau masih valid)
+    var saved = sessionStorage.getItem('JLN_TOKEN');
+    if (saved){
+      authToken = saved;
+      startLoading('Memulihkan sesi...');
+      google.script.run
+        .withSuccessHandler(function(res){
+          endLoading();
+          if (res && res.success && res.session && res.session.user){
+            currentUser = res.session.user;
+
+            // PATCH: kalau masih wajib ganti password -> paksa sebelum masuk app
+            var must = truthy(currentUser.must_change_password);
+            if (must){
+              showForceChangePassword(function(){
+                afterLogin();
+              });
+            } else {
+              afterLogin();
+            }
+          } else {
+            authToken = null;
+            sessionStorage.removeItem('JLN_TOKEN');
+          }
+        })
+        .withFailureHandler(function(){
+          endLoading();
+          authToken = null;
+          sessionStorage.removeItem('JLN_TOKEN');
+        })
+        .getSession(saved);
+    }
+  }
 });
+
+/* ===========================
+   AUTH UI + PERMISSION HELPERS
+=========================== */
+function canAddRow(tableName){
+  if (currentUser && currentUser.role === 'Admin') return true;
+  if (currentUser && currentUser.role === 'Sales' && tableName === 'customers') return true;
+  if (currentUser && currentUser.role === 'Pelanggan' && tableName === 'tickets') return true;
+  return false;
+}
+function canEditRow(tableName, item){
+  if (currentUser && currentUser.role === 'Admin') return true;
+  if (currentUser && currentUser.role === 'Sales' && tableName === 'customers') return true;
+  if (currentUser && currentUser.role === 'Teknisi' && tableName === 'tickets') return true;
+  return false;
+}
+function canDeleteRow(tableName, item){
+  if (currentUser && currentUser.role === 'Admin') return true;
+  if (currentUser && currentUser.role === 'Sales' && tableName === 'customers') return true;
+  return false;
+}
 
 /* ===========================
    AUTH
@@ -293,6 +498,8 @@ function handleLogin(e){
     if (u){
       currentUser = Object.assign({}, u);
       if (!currentUser.role) currentUser.role = 'Pelanggan';
+      authToken = 'preview-token';
+      endLoading();
       afterLogin();
     } else {
       endLoading();
@@ -306,7 +513,18 @@ function handleLogin(e){
       endLoading();
       if (res && res.success){
         currentUser = res.user;
-        afterLogin();
+        authToken = res.token;
+        sessionStorage.setItem('JLN_TOKEN', authToken);
+
+        // PATCH: Wajib ganti password untuk user baru
+        var must = !!res.mustChangePassword || truthy(currentUser.must_change_password);
+        if (must){
+          showForceChangePassword(function(){
+            afterLogin();
+          });
+        } else {
+          afterLogin();
+        }
       } else {
         Swal.fire('Gagal', (res && res.message) ? res.message : 'Login gagal', 'error');
       }
@@ -331,10 +549,34 @@ function afterLogin(){
   loadReferenceData(function(){ refreshDashboardStats(); });
 }
 
-function logout(){
-  currentUser = null;
-  document.getElementById('mainView').classList.add('hidden');
-  document.getElementById('loginView').classList.remove('hidden');
+function logout(silent){
+  var _do = function(){
+    currentUser = null;
+    authToken = null;
+    sessionStorage.removeItem('JLN_TOKEN');
+    document.getElementById('mainView').classList.add('hidden');
+    document.getElementById('loginView').classList.remove('hidden');
+  };
+
+  if (isPreview){
+    _do();
+    return;
+  }
+  if (!authToken){
+    _do();
+    return;
+  }
+
+  google.script.run
+    .withSuccessHandler(function(){
+      _do();
+      if (!silent) Swal.fire('Info', 'Logout berhasil.', 'success');
+    })
+    .withFailureHandler(function(){
+      _do();
+      if (!silent) Swal.fire('Info', 'Logout berhasil.', 'success');
+    })
+    .logoutSession(authToken);
 }
 
 /* ===========================
@@ -420,16 +662,13 @@ function loadReferenceData(cb){
     return;
   }
 
-  google.script.run
-    .withSuccessHandler(function(res){
-      refData = res || refData;
-      if (cb) cb();
-    })
-    .withFailureHandler(function(err){
-      Swal.fire('Error', 'Gagal load reference data: ' + err, 'error');
-      if (cb) cb();
-    })
-    .getReferenceData();
+  runAuth('getReferenceData', [], function(res){
+    refData = res || refData;
+    if (cb) cb();
+  }, function(err){
+    Swal.fire('Error', 'Gagal load reference data: ' + err, 'error');
+    if (cb) cb();
+  });
 }
 
 /* ===========================
@@ -446,7 +685,7 @@ function renderDashboard(){
     '</div>' +
     '<div class="mt-6 bg-white p-6 rounded-2xl shadow-sm border">' +
       '<h3 class="font-bold text-gray-800 mb-2">Info</h3>' +
-      '<p class="text-sm text-gray-600">Sistem berjalan LIVE melalui Google Spreadsheet. Koordinat pelanggan bisa dipilih lewat peta satelit saat input pelanggan.</p>' +
+      '<p class="text-sm text-gray-600">Sistem berjalan LIVE melalui Google Spreadsheet. Koordinat pelanggan bisa dipilih lewat peta satelit saat input pelanggan. Tiket sekarang punya timeline (log) + chat/lampiran.</p>' +
     '</div>';
 }
 
@@ -460,23 +699,21 @@ function refreshDashboardStats(){
     return;
   }
 
-  google.script.run.withSuccessHandler(function(res){
+  runAuth('getDashboardStats', [], function(res){
     if (!res || !res.success) return;
     document.getElementById('statCustomers').textContent = res.customers;
     document.getElementById('statPackages').textContent = res.packages;
     document.getElementById('statTickets').textContent = res.tickets;
     document.getElementById('statSales').textContent = res.sales;
     document.getElementById('statIncome').textContent = 'Rp ' + (res.income || 0).toLocaleString('id-ID');
-  }).getDashboardStats();
+  }, function(){});
 }
 
 /* ===========================
-   TABLE CONFIG PER MENU (filter + sort)
+   TABLE CONFIG PER MENU
 =========================== */
 function getExtraFilterConfig(tableName){
-  // Kembalikan {label, options:[{val,txt}], key:'fieldname'} atau null
   if (tableName === 'customers'){
-    // filter by Paket
     var opts = [{val:'', txt:'Semua Paket'}].concat((refData.packages||[]).map(function(p){
       return {val:p.id, txt:p.nama_paket};
     }));
@@ -484,7 +721,6 @@ function getExtraFilterConfig(tableName){
   }
 
   if (tableName === 'tickets'){
-    // filter by Teknisi
     var opts2 = [{val:'', txt:'Semua Teknisi'}].concat((refData.teknisi||[]).map(function(t){
       return {val:t.id, txt:t.nama};
     }));
@@ -492,7 +728,6 @@ function getExtraFilterConfig(tableName){
   }
 
   if (tableName === 'users'){
-    // filter by Role
     return { key:'role', label:'Filter Role', options:[
       {val:'', txt:'Semua Role'},
       {val:'Admin', txt:'Admin'},
@@ -502,7 +737,6 @@ function getExtraFilterConfig(tableName){
   }
 
   if (tableName === 'announcements'){
-    // filter by target
     return { key:'target', label:'Filter Target', options:[
       {val:'', txt:'Semua Target'},
       {val:'Semua', txt:'Semua'},
@@ -513,7 +747,6 @@ function getExtraFilterConfig(tableName){
   }
 
   if (tableName === 'tutorials'){
-    // filter by kategori
     return { key:'kategori', label:'Filter Kategori', options:[
       {val:'', txt:'Semua Kategori'},
       {val:'Pelanggan', txt:'Pelanggan'},
@@ -523,7 +756,6 @@ function getExtraFilterConfig(tableName){
   }
 
   if (tableName === 'reports'){
-    // filter by jenis laporan
     return { key:'jenis_laporan', label:'Filter Jenis', options:[
       {val:'', txt:'Semua Jenis'},
       {val:'Pemasukan', txt:'Pemasukan'},
@@ -532,16 +764,11 @@ function getExtraFilterConfig(tableName){
   }
 
   if (tableName === 'packages'){
-    // filter by status_aktif
     return { key:'status_aktif', label:'Filter Status', options:[
       {val:'', txt:'Semua Status'},
       {val:'Aktif', txt:'Aktif'},
       {val:'Non-Aktif', txt:'Non-Aktif'}
     ]};
-  }
-
-  if (tableName === 'locations'){
-    return null;
   }
 
   return null;
@@ -610,9 +837,6 @@ function renderCRUDTable(tableName, headerTitle, columns){
   tableState = { search:'', filterStatus:'', sortKey:'', sortDir:'asc', extraKey:'', extraVal:'' };
 
   var extra = getExtraFilterConfig(tableName);
-
-  // status filter ditampilkan hanya kalau ada field status/status_aktif/ketersediaan di tabel
-  // tapi kita tetap tampilkan dropdown status umum seperti sebelumnya agar tidak merusak alur.
   var extraFilterHtml = '';
   if (extra){
     extraFilterHtml =
@@ -630,9 +854,11 @@ function renderCRUDTable(tableName, headerTitle, columns){
         '<p class="text-sm text-gray-500">Kelola data ' + escapeHtml(tableName) + ' secara realtime.</p>' +
       '</div>' +
       '<div class="flex gap-2">' +
-        '<button onclick="openForm(\'' + tableName + '\')" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium flex items-center gap-2">' +
-          '<i data-lucide="plus" class="w-4 h-4"></i> Tambah' +
-        '</button>' +
+        (canAddRow(tableName)
+          ? '<button onclick="openForm(\'' + tableName + '\')" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium flex items-center gap-2">' +
+              '<i data-lucide="plus" class="w-4 h-4"></i> Tambah' +
+            '</button>'
+          : '') +
       '</div>' +
     '</div>' +
 
@@ -710,8 +936,10 @@ function sortBy(key){
   renderTableRows();
 }
 
+/* ✅ PATCH: loadTableData aman walau server balikin object */
 function loadTableData(tableName){
   startLoading('Memuat data...');
+
   if (isPreview){
     globalTableData = mockDB[tableName] || [];
     endLoading();
@@ -719,17 +947,16 @@ function loadTableData(tableName){
     return;
   }
 
-  google.script.run
-    .withSuccessHandler(function(res){
-      globalTableData = res || [];
-      endLoading();
-      renderTableRows();
-    })
-    .withFailureHandler(function(err){
-      endLoading();
-      Swal.fire('Error', 'Gagal load data: ' + err, 'error');
-    })
-    .getSheetData(tableName);
+  runAuth('getSheetData', [tableName], function(res){
+    globalTableData = normalizeSheetDataResponse(res);
+    endLoading();
+    renderTableRows();
+  }, function(err){
+    endLoading();
+    Swal.fire('Error', 'Gagal load data: ' + err, 'error');
+    globalTableData = [];
+    renderTableRows();
+  });
 }
 
 function renderTableRows(){
@@ -737,8 +964,14 @@ function renderTableRows(){
   var footer = document.getElementById('tableFooter');
   if (!tbody) return;
 
+  /* ✅ PATCH GUARD: cegah crash saat globalTableData bukan array / config belum siap */
+  if (!Array.isArray(globalTableData)) globalTableData = [];
+  if (!globalTableConfig || !globalTableConfig.columns) {
+    tbody.innerHTML = '<tr><td class="p-8 text-center text-gray-400">Konfigurasi tabel belum siap.</td></tr>';
+    return;
+  }
+
   var filtered = (globalTableData || []).filter(function(item){
-    // filter status (support status, status_aktif, ketersediaan, target, kategori)
     if (tableState.filterStatus){
       var hit = false;
       ['status','status_aktif','ketersediaan'].forEach(function(k){
@@ -747,12 +980,10 @@ function renderTableRows(){
       if (!hit) return false;
     }
 
-    // extra filter (paket_id, teknisi_id, role, target, kategori, jenis_laporan)
     if (tableState.extraKey && tableState.extraVal){
       if (String(item[tableState.extraKey] || '') !== String(tableState.extraVal)) return false;
     }
 
-    // search
     if (tableState.search){
       var found = false;
       Object.keys(item).forEach(function(k){
@@ -765,7 +996,6 @@ function renderTableRows(){
     return true;
   });
 
-  // sort
   if (tableState.sortKey){
     filtered.sort(function(a,b){
       var valA = a[tableState.sortKey] || '';
@@ -787,21 +1017,41 @@ function renderTableRows(){
   tbody.innerHTML = filtered.map(function(item){
     var tds = globalTableConfig.columns.map(function(col){
       var val = (item[col.key] === undefined || item[col.key] === null || item[col.key] === '') ? '-' : item[col.key];
-
       if (col.type === 'money') val = fmtMoney(val);
       if (col.type === 'badge') val = badge(val);
-
       return '<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">' + val + '</td>';
     }).join('');
 
     var itemStr = JSON.stringify(item).replace(/"/g, '&quot;');
 
-    // tombol detail + edit + delete
+    var detailBtn = '';
+    if (globalTableConfig.tableName === 'tickets') {
+      detailBtn =
+        '<button onclick="openTicketDetail(\'' + escapeHtml(item.id) + '\')" class="text-gray-600 hover:text-gray-900" title="Detail">' +
+          '<i data-lucide="eye" class="w-4 h-4"></i>' +
+        '</button>';
+    } else {
+      detailBtn =
+        '<button onclick="showDetail(\'' + globalTableConfig.tableName + '\', ' + itemStr + ')" class="text-gray-600 hover:text-gray-900" title="Detail">' +
+          '<i data-lucide="eye" class="w-4 h-4"></i>' +
+        '</button>';
+    }
+
+    var editBtn = canEditRow(globalTableConfig.tableName, item)
+      ? '<button onclick="openForm(\'' + globalTableConfig.tableName + '\', ' + itemStr + ')" class="text-blue-600 hover:text-blue-900" title="Edit">' +
+          '<i data-lucide="edit-2" class="w-4 h-4"></i>' +
+        '</button>'
+      : '';
+
+    var delBtn = canDeleteRow(globalTableConfig.tableName, item)
+      ? '<button onclick="confirmDelete(\'' + globalTableConfig.tableName + '\', \'' + escapeHtml(item.id) + '\')" class="text-red-600 hover:text-red-900" title="Hapus">' +
+          '<i data-lucide="trash-2" class="w-4 h-4"></i>' +
+        '</button>'
+      : '';
+
     var actions =
       '<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end gap-3">' +
-        '<button onclick="showDetail(\'' + globalTableConfig.tableName + '\', ' + itemStr + ')" class="text-gray-600 hover:text-gray-900" title="Detail"><i data-lucide="eye" class="w-4 h-4"></i></button>' +
-        '<button onclick="openForm(\'' + globalTableConfig.tableName + '\', ' + itemStr + ')" class="text-blue-600 hover:text-blue-900" title="Edit"><i data-lucide="edit-2" class="w-4 h-4"></i></button>' +
-        '<button onclick="confirmDelete(\'' + globalTableConfig.tableName + '\', \'' + escapeHtml(item.id) + '\')" class="text-red-600 hover:text-red-900" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
+        detailBtn + editBtn + delBtn +
       '</td>';
 
     return '<tr class="hover:bg-gray-50 transition-colors border-b last:border-0">' + tds + actions + '</tr>';
@@ -860,7 +1110,6 @@ function showDetail(tableName, item){
         '</div>';
     }
     else {
-      // default detail untuk tabel lain
       var rows = Object.keys(item || {}).map(function(k){
         var v = item[k];
         if (k === 'password') v = '••••••';
@@ -901,6 +1150,11 @@ function openForm(tableName, item){
 
   var fields = [];
 
+  /* =========================================================
+     ✅ PERBAIKAN DI SINI (CUSTOMERS): Sales tidak pilih Sales
+     - Admin: dropdown Sales tampil
+     - Sales: sales_id otomatis = currentUser.id (hidden)
+  ========================================================== */
   if (tableName === 'customers'){
     fields = [
       { name:'nama', label:'Nama Lengkap', type:'text', req:true },
@@ -914,10 +1168,6 @@ function openForm(tableName, item){
       { name:'paket_id', label:'Paket', type:'select',
         options:(refData.packages||[]).map(function(p){return {val:p.id, txt:(p.nama_paket + ' - ' + p.harga)};}) },
 
-      { name:'sales_id', label:'Sales', type:'select',
-        options:(refData.sales||[]).map(function(s){return {val:s.id, txt:s.nama};}) },
-
-      // update: catatan tambahan
       { name:'catatan', label:'Catatan Tambahan', type:'textarea', req:false },
 
       { name:'foto_ktp', label:'Foto KTP', type:'file', req:true },
@@ -925,6 +1175,12 @@ function openForm(tableName, item){
     ];
 
     if (currentUser.role === 'Admin'){
+      // Admin boleh pilih sales
+      fields.push(
+        { name:'sales_id', label:'Sales', type:'select', req:true,
+          options:(refData.sales||[]).map(function(s){return {val:s.id, txt:s.nama};}) }
+      );
+
       fields.push(
         { name:'username', label:'Nomor Internet', type:'text', req:true },
         { name:'password', label:'Password', type:'text', req:true },
@@ -935,23 +1191,54 @@ function openForm(tableName, item){
         ]}
       );
     } else if (currentUser.role === 'Sales'){
+      // Sales: otomatis rekrutan sales yang login (tanpa dropdown)
+      fields.push({ name:'sales_id', type:'hidden', value:(currentUser && currentUser.id) ? currentUser.id : '' });
       fields.push({ name:'status', type:'hidden', value:'Antrian' });
     }
   }
+  /* =======================
+     BAGIAN LAIN TETAP
+  ======================== */
   else if (tableName === 'tickets'){
-    fields = [
-      { name:'judul_laporan', label:'Kendala / Masalah', type:'text', req:true },
-      { name:'pelanggan_id', label:'Pelanggan (Opsional)', type:'select',
-        options:[{val:'',txt:'- Pilih -'}].concat((refData.customers||[]).map(function(c){return {val:c.id, txt:c.nama};})) },
-      { name:'teknisi_id', label:'Assign Teknisi', type:'select',
-        options:[{val:'',txt:'- Pilih -'}].concat((refData.teknisi||[]).map(function(t){return {val:t.id, txt:t.nama};})) },
-      { name:'status', label:'Status', type:'select', options:[
-        {val:'Open', txt:'Open'},
-        {val:'Proses', txt:'Proses'},
-        {val:'Selesai', txt:'Selesai'}
-      ]},
-      { name:'keterangan_teknisi', label:'Catatan Teknisi', type:'textarea' }
-    ];
+    if (currentUser.role === 'Admin'){
+      fields = [
+        { name:'judul_laporan', label:'Kendala / Masalah', type:'text', req:true },
+        { name:'pelanggan_id', label:'Pelanggan (Opsional)', type:'select',
+          options:[{val:'',txt:'- Pilih -'}].concat((refData.customers||[]).map(function(c){return {val:c.id, txt:c.nama};})) },
+        { name:'teknisi_id', label:'Assign Teknisi', type:'select',
+          options:[{val:'',txt:'- Pilih -'}].concat((refData.teknisi||[]).map(function(t){return {val:t.id, txt:t.nama};})) },
+        { name:'status', label:'Status', type:'select', options:[
+          {val:'Open', txt:'Open'},
+          {val:'Proses', txt:'Proses'},
+          {val:'Selesai', txt:'Selesai'}
+        ]},
+        { name:'keterangan_teknisi', label:'Catatan Teknisi', type:'textarea' }
+      ];
+    }
+    else if (currentUser.role === 'Teknisi'){
+      if (!item) {
+        Swal.fire('Info', 'Teknisi tidak bisa membuat tiket baru.', 'info');
+        return;
+      }
+      fields = [
+        { name:'judul_laporan', label:'Judul (tidak bisa diubah)', type:'text', req:false },
+        { name:'status', label:'Status', type:'select', options:[
+          {val:'Open', txt:'Open'},
+          {val:'Proses', txt:'Proses'},
+          {val:'Selesai', txt:'Selesai'}
+        ]},
+        { name:'keterangan_teknisi', label:'Catatan Teknisi', type:'textarea' }
+      ];
+    }
+    else if (currentUser.role === 'Pelanggan'){
+      fields = [
+        { name:'judul_laporan', label:'Kendala / Masalah', type:'text', req:true }
+      ];
+    } else {
+      fields = [
+        { name:'judul_laporan', label:'Kendala / Masalah', type:'text', req:true }
+      ];
+    }
   }
   else if (tableName === 'announcements'){
     fields = [
@@ -1022,7 +1309,6 @@ function openForm(tableName, item){
     ];
   }
 
-  // render inputs
   fields.forEach(function(f){
     if (f.type === 'hidden'){
       var hid = document.createElement('input');
@@ -1237,7 +1523,6 @@ async function handleFormSubmit(e){
 
   startLoading('Membaca data & upload...');
 
-  // NOTE: file field tetap jalan
   for (var pair of formData.entries()){
     var key = pair[0];
     var value = pair[1];
@@ -1274,45 +1559,39 @@ async function handleFormSubmit(e){
   }
 
   if (currentEditId){
-    google.script.run
-      .withSuccessHandler(function(res){
-        endLoading();
-        if (res && res.success){
-          closeModal();
-          Swal.fire('Sukses', 'Data berhasil diupdate!', 'success');
-          loadReferenceData(function(){
-            loadTableData(tableName);
-            refreshDashboardStats();
-          });
-        } else {
-          Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal update', 'error');
-        }
-      })
-      .withFailureHandler(function(err){
-        endLoading();
-        Swal.fire('Error', String(err), 'error');
-      })
-      .updateData(tableName, currentEditId, dataObj);
+    runAuth('updateData', [tableName, currentEditId, dataObj], function(res){
+      endLoading();
+      if (res && res.success){
+        closeModal();
+        Swal.fire('Sukses', 'Data berhasil diupdate!', 'success');
+        loadReferenceData(function(){
+          loadTableData(tableName);
+          refreshDashboardStats();
+        });
+      } else {
+        Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal update', 'error');
+      }
+    }, function(err){
+      endLoading();
+      Swal.fire('Error', String(err), 'error');
+    });
   } else {
-    google.script.run
-      .withSuccessHandler(function(res){
-        endLoading();
-        if (res && res.success){
-          closeModal();
-          Swal.fire('Sukses', 'Data berhasil ditambahkan!', 'success');
-          loadReferenceData(function(){
-            loadTableData(tableName);
-            refreshDashboardStats();
-          });
-        } else {
-          Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal simpan', 'error');
-        }
-      })
-      .withFailureHandler(function(err){
-        endLoading();
-        Swal.fire('Error', String(err), 'error');
-      })
-      .saveData(tableName, dataObj);
+    runAuth('saveData', [tableName, dataObj], function(res){
+      endLoading();
+      if (res && res.success){
+        closeModal();
+        Swal.fire('Sukses', 'Data berhasil ditambahkan!', 'success');
+        loadReferenceData(function(){
+          loadTableData(tableName);
+          refreshDashboardStats();
+        });
+      } else {
+        Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal simpan', 'error');
+      }
+    }, function(err){
+      endLoading();
+      Swal.fire('Error', String(err), 'error');
+    });
   }
 }
 
@@ -1346,24 +1625,267 @@ function doDelete(tableName, id){
     return;
   }
 
-  google.script.run
-    .withSuccessHandler(function(res){
+  runAuth('deleteData', [tableName, id], function(res){
+    endLoading();
+    if (res && res.success){
+      Swal.fire('Sukses', 'Data berhasil dihapus!', 'success');
+      loadReferenceData(function(){
+        loadTableData(tableName);
+        refreshDashboardStats();
+      });
+    } else {
+      Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal hapus', 'error');
+    }
+  }, function(err){
+    endLoading();
+    Swal.fire('Error', String(err), 'error');
+  });
+}
+
+/* =========================================================
+   PATCH F: TICKET DETAIL + TIMELINE + CHAT + STATUS + ASSIGN
+========================================================= */
+var _ticketDetailId = null;
+
+function openTicketDetail(ticketId){
+  _ticketDetailId = ticketId;
+
+  startLoading('Memuat detail tiket...');
+
+  if (isPreview){
+    var t = (mockDB.tickets || []).find(function(x){ return x.id === ticketId; }) || {id:ticketId, judul_laporan:'(Preview)', status:'Open', created_at:'-'};
+    var logs = (mockDB.ticket_logs || []).filter(function(l){ return l.ticket_id === ticketId; });
+    endLoading();
+    renderTicketDetail(t, logs);
+    return;
+  }
+
+  runAuth('getTicketDetail', [ticketId], function(res){
+    endLoading();
+    if (!res || !res.success){
+      Swal.fire('Gagal', (res && res.message) ? res.message : 'Tidak bisa memuat tiket', 'error');
+      return;
+    }
+    renderTicketDetail(res.ticket, res.logs || []);
+  }, function(err){
+    endLoading();
+    Swal.fire('Error', String(err), 'error');
+  });
+}
+
+function backToTickets(){
+  renderTable('tickets', 'Tiket');
+}
+
+function renderTicketDetail(ticket, logs){
+  var teknisiName = '-';
+  if (ticket.teknisi_id){
+    var tek = (refData.teknisi || []).find(function(x){ return String(x.id) === String(ticket.teknisi_id); });
+    teknisiName = tek ? tek.nama : ticket.teknisi_id;
+  }
+
+  var pelangganName = '-';
+  if (ticket.pelanggan_id){
+    var c = (refData.customers || []).find(function(x){ return String(x.id) === String(ticket.pelanggan_id); });
+    pelangganName = c ? c.nama : ticket.pelanggan_id;
+  }
+
+  var logsHtml = '';
+  if (!logs || logs.length === 0){
+    logsHtml = '<div class="text-sm text-gray-400">Belum ada aktivitas.</div>';
+  } else {
+    logsHtml = logs.map(function(l){
+      var mine = (String(l.actor_id || '') === String(currentUser.id || ''));
+      var box = mine ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100';
+      var role = l.actor_role ? ('<span class="text-xs font-bold text-gray-500">[' + escapeHtml(l.actor_role) + ']</span>') : '';
+      var attach = l.attachment
+        ? '<div class="mt-2"><a class="text-xs text-blue-600 hover:underline" target="_blank" href="' + escapeHtml(l.attachment) + '">Lihat Lampiran</a></div>'
+        : '';
+      return '' +
+        '<div class="border ' + box + ' rounded-xl p-3">' +
+          '<div class="flex items-center justify-between gap-2">' +
+            '<div class="text-sm font-semibold text-gray-800">' + escapeHtml(l.actor_name || '-') + ' ' + role + '</div>' +
+            '<div class="text-xs text-gray-400">' + escapeHtml(l.created_at || '-') + '</div>' +
+          '</div>' +
+          '<div class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">' + escapeHtml(l.message || '') + '</div>' +
+          attach +
+        '</div>';
+    }).join('<div class="h-2"></div>');
+  }
+
+  var canStatus = (currentUser.role === 'Admin' || currentUser.role === 'Teknisi');
+  var canAssign = (currentUser.role === 'Admin');
+
+  var statusBlock = canStatus ? (`
+    <div class="mt-4 border rounded-2xl p-4 bg-white">
+      <div class="font-bold text-gray-800 mb-2">Aksi Teknisi/Admin</div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-2">
+        <div class="md:col-span-4">
+          <label class="text-xs text-gray-500">Status</label>
+          <select id="ticketStatusSel" class="w-full border rounded-lg px-3 py-2 outline-none bg-white">
+            <option value="Open" ${ticket.status==='Open'?'selected':''}>Open</option>
+            <option value="Proses" ${ticket.status==='Proses'?'selected':''}>Proses</option>
+            <option value="Selesai" ${ticket.status==='Selesai'?'selected':''}>Selesai</option>
+          </select>
+        </div>
+        <div class="md:col-span-6">
+          <label class="text-xs text-gray-500">Catatan (opsional)</label>
+          <input id="ticketStatusNote" class="w-full border rounded-lg px-3 py-2 outline-none" placeholder="Contoh: sudah dicek, ganti kabel...">
+        </div>
+        <div class="md:col-span-2 flex items-end">
+          <button onclick="updateTicketStatusUI('${escapeHtml(ticket.id)}')" class="w-full px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Update</button>
+        </div>
+      </div>
+    </div>
+  `) : '';
+
+  var assignBlock = canAssign ? (`
+    <div class="mt-3 border rounded-2xl p-4 bg-white">
+      <div class="font-bold text-gray-800 mb-2">Assign Teknisi (Admin)</div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-2">
+        <div class="md:col-span-10">
+          <select id="ticketAssignSel" class="w-full border rounded-lg px-3 py-2 outline-none bg-white">
+            <option value="">- (kosong) -</option>
+            ${(refData.teknisi||[]).map(function(t){
+              var sel = String(t.id)===String(ticket.teknisi_id) ? 'selected' : '';
+              return '<option value="'+escapeHtml(t.id)+'" '+sel+'>'+escapeHtml(t.nama)+'</option>';
+            }).join('')}
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <button onclick="assignTicketUI('${escapeHtml(ticket.id)}')" class="w-full px-4 py-2 rounded-lg bg-gray-800 text-white hover:bg-gray-900 font-medium">Assign</button>
+        </div>
+      </div>
+    </div>
+  `) : '';
+
+  document.getElementById('contentArea').innerHTML = `
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-xl font-bold text-gray-800">Detail Tiket</h3>
+        <p class="text-sm text-gray-500">Timeline aktivitas & komunikasi.</p>
+      </div>
+      <button onclick="backToTickets()" class="px-4 py-2 rounded-lg border hover:bg-gray-50">← Kembali</button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+      <div class="md:col-span-4 bg-white border rounded-2xl p-5">
+        <div class="text-xs text-gray-500">Judul</div>
+        <div class="font-bold text-gray-800 mt-1">${escapeHtml(ticket.judul_laporan || '-')}</div>
+
+        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <div class="text-xs text-gray-500">Status</div>
+            <div class="mt-1">${badge(ticket.status)}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500">Dibuat</div>
+            <div class="mt-1 font-semibold text-gray-800">${escapeHtml(ticket.created_at || '-')}</div>
+          </div>
+          <div class="col-span-2">
+            <div class="text-xs text-gray-500">Pelanggan</div>
+            <div class="mt-1 font-semibold text-gray-800">${escapeHtml(pelangganName)}</div>
+          </div>
+          <div class="col-span-2">
+            <div class="text-xs text-gray-500">Teknisi</div>
+            <div class="mt-1 font-semibold text-gray-800">${escapeHtml(teknisiName)}</div>
+          </div>
+        </div>
+
+        ${assignBlock}
+        ${statusBlock}
+      </div>
+
+      <div class="md:col-span-8 space-y-4">
+        <div class="bg-white border rounded-2xl p-5">
+          <div class="font-bold text-gray-800 mb-3">Timeline</div>
+          <div class="space-y-2">${logsHtml}</div>
+        </div>
+
+        <div class="bg-white border rounded-2xl p-5">
+          <div class="font-bold text-gray-800 mb-2">Kirim Pesan / Lampiran</div>
+          <textarea id="ticketMsg" rows="3" class="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Tulis update..."></textarea>
+          <div class="flex flex-col md:flex-row gap-2 mt-2 items-center">
+            <input id="ticketFile" type="file" class="w-full border rounded-lg px-3 py-2" />
+            <button onclick="sendTicketMessage('${escapeHtml(ticket.id)}')" class="w-full md:w-auto px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium">Kirim</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  lucide.createIcons();
+}
+
+async function sendTicketMessage(ticketId){
+  var msg = (document.getElementById('ticketMsg').value || '').trim();
+  var fileEl = document.getElementById('ticketFile');
+  var file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
+
+  if (!msg && !file){
+    Swal.fire('Info', 'Pesan atau lampiran wajib diisi.', 'info');
+    return;
+  }
+
+  startLoading('Mengirim pesan...');
+
+  try {
+    var payload = { message: msg };
+    if (file && file.size > 0){
+      payload.attachment = await readFile(file);
+    }
+
+    runAuth('addTicketMessage', [ticketId, payload], function(res){
       endLoading();
       if (res && res.success){
-        Swal.fire('Sukses', 'Data berhasil dihapus!', 'success');
-        loadReferenceData(function(){
-          loadTableData(tableName);
-          refreshDashboardStats();
-        });
+        document.getElementById('ticketMsg').value = '';
+        if (fileEl) fileEl.value = '';
+        openTicketDetail(ticketId);
       } else {
-        Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal hapus', 'error');
+        Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal kirim', 'error');
       }
-    })
-    .withFailureHandler(function(err){
+    }, function(err){
       endLoading();
       Swal.fire('Error', String(err), 'error');
-    })
-    .deleteData(tableName, id);
+    });
+  } catch(e){
+    endLoading();
+    Swal.fire('Error', String(e), 'error');
+  }
+}
+
+function updateTicketStatusUI(ticketId){
+  var status = document.getElementById('ticketStatusSel').value;
+  var note = (document.getElementById('ticketStatusNote').value || '').trim();
+
+  startLoading('Update status...');
+  runAuth('updateTicketStatus', [ticketId, status, note], function(res){
+    endLoading();
+    if (res && res.success){
+      openTicketDetail(ticketId);
+    } else {
+      Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal update status', 'error');
+    }
+  }, function(err){
+    endLoading();
+    Swal.fire('Error', String(err), 'error');
+  });
+}
+
+function assignTicketUI(ticketId){
+  var teknisiId = document.getElementById('ticketAssignSel').value;
+
+  startLoading('Assign teknisi...');
+  runAuth('assignTicketTechnician', [ticketId, teknisiId], function(res){
+    endLoading();
+    if (res && res.success){
+      openTicketDetail(ticketId);
+    } else {
+      Swal.fire('Gagal', (res && res.message) ? res.message : 'Gagal assign', 'error');
+    }
+  }, function(err){
+    endLoading();
+    Swal.fire('Error', String(err), 'error');
+  });
 }
 </script>
 
